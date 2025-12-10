@@ -14,12 +14,22 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
 	title: "Karasplitter Web - Karaoke Line Splitter",
-	description: "Split your .ass karaoke lines with ease. A web-based tool for Aegisub karaoke timing.",
-	keywords: ["karaoke", "aegisub", "ass", "splitter", "lyrics", "timing", "fansub"],
+	description:
+		"Split your .ass karaoke lines with ease. A web-based tool for Aegisub karaoke timing.",
+	keywords: [
+		"karaoke",
+		"aegisub",
+		"ass",
+		"splitter",
+		"lyrics",
+		"timing",
+		"fansub",
+	],
 	authors: [{ name: "Karasplitter Web" }],
 	openGraph: {
 		title: "Karasplitter Web",
-		description: "Split your .ass karaoke lines with ease. A web-based tool for Aegisub karaoke timing.",
+		description:
+			"Split your .ass karaoke lines with ease. A web-based tool for Aegisub karaoke timing.",
 		type: "website",
 		siteName: "Karasplitter Web",
 	},

@@ -19,7 +19,7 @@ export function TextInput({ value, onChange }: TextInputProps) {
 					id="ass-input"
 					value={value}
 					onChange={(e) => onChange(e.target.value)}
-					placeholder="[Script Info]..."
+					placeholder="Dialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,kinou yori mo"
 					className="w-full h-64 p-4 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm resize-y text-black"
 				/>
 				<div className="absolute top-3 right-3 text-gray-400 pointer-events-none">
