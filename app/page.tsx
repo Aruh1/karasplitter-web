@@ -1,6 +1,6 @@
 "use client";
 
-import { Music } from "lucide-react";
+import { Github, Music } from 'lucide-react';
 import { useState } from "react";
 import { ResultPreview } from "@/components/ResultPreview";
 import { SplitOptions } from "@/components/SplitOptions";
@@ -29,6 +29,18 @@ export default function Home() {
 	return (
 		<main className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 font-sans">
 			<div className="max-w-4xl mx-auto">
+				<div className="absolute top-4 right-4 flex items-center gap-4">
+					<a
+						href="https://github.com/Aruh1/karasplitter-web"
+						target="_blank"
+						rel="noopener noreferrer"
+						className="p-2 rounded-md hover:bg-gray-100 transition-colors text-gray-700"
+						aria-label="GitHub Repository"
+					>
+						<Github className="w-5 h-5" />
+					</a>
+				</div>
+
 				<div className="text-center mb-10">
 					<div className="flex justify-center mb-4">
 						<div className="p-3 bg-blue-600 rounded-full shadow-lg">

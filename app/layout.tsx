@@ -32,11 +32,21 @@ export const metadata: Metadata = {
 			"Split your .ass karaoke lines with ease. A web-based tool for Aegisub karaoke timing.",
 		type: "website",
 		siteName: "Karasplitter Web",
+		images: [
+			{
+				url: "https://cdn.jsdelivr.net/gh/Aruh1/karasplitter-web@master/public/preview.png",
+			},
+		],
 	},
 	twitter: {
 		card: "summary_large_image",
 		title: "Karasplitter Web",
 		description: "Split your .ass karaoke lines with ease.",
+		images: [
+			{
+				url: "https://cdn.jsdelivr.net/gh/Aruh1/karasplitter-web@master/public/preview.png",
+			},
+		],
 	},
 };
 

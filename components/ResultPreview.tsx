@@ -29,7 +29,7 @@ export function ResultPreview({ processedContent }: ResultPreviewProps) {
 				<button
 					type="button"
 					onClick={handleCopy}
-					className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-md active:scale-95 transform"
+					className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors shadow-md active:scale-95 transform"
 				>
 					{copied ? (
 						<Check className="w-4 h-4" />
