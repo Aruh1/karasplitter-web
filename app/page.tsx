@@ -41,7 +41,7 @@ export default function Home() {
 						<Github className="w-5 h-5" />
 					</a>
 					<span className="text-gray-500 font-medium text-xs">
-						[{process.env.NEXT_PUBLIC_COMMIT_HASH || "development"}]
+						[{process.env.GIT_COMMIT_HASH || "development"}]
 					</span>
 				</div>
 

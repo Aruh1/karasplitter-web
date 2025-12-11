@@ -1,3 +1,3 @@
 export const getCommitHash = () => {
-	return process.env.NEXT_PUBLIC_COMMIT_HASH || "development";
+	return process.env.GIT_COMMIT_HASH || "development";
 };
