@@ -35,11 +35,14 @@ export default function Home() {
 						href="https://github.com/Aruh1/karasplitter-web"
 						target="_blank"
 						rel="noopener noreferrer"
-						className="p-2 rounded-md hover:bg-gray-100 transition-colors text-gray-700"
+						className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors text-gray-700 font-medium"
 						aria-label="GitHub Repository"
 					>
 						<Github className="w-5 h-5" />
 					</a>
+					<span className="text-gray-500 font-medium text-xs">
+						[{process.env.NEXT_PUBLIC_COMMIT_HASH || "development"}]
+					</span>
 				</div>
 
 				<div className="text-center mb-10">
