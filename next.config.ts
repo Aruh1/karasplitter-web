@@ -9,10 +9,12 @@ const getGitCommitHash = () => {
 	}
 };
 
+const isStatic = process.env.NEXT_STATIC_EXPORT === "true";
+
 const nextConfig: NextConfig = {
-	output: "export",
+	output: isStatic ? "export" : undefined,
 	images: {
-		unoptimized: true,
+		unoptimized: isStatic,
 	},
 	env: {
 		GIT_COMMIT_HASH: getGitCommitHash(),
