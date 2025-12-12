@@ -5,29 +5,44 @@ export interface ExtractedMetadata {
 	styles: string[];
 }
 
+// Pre-computed character sets for O(1) lookup instead of O(n) string.includes()
+const PUNCTUATION_CHARS = new Set([" ", "!", "?", ",", ";", ":"]);
+const PUNCTUATION_CHARS_WITH_BRACE = new Set([
+	" ",
+	"!",
+	"?",
+	",",
+	";",
+	":",
+	"}",
+]);
+const VOWELS = new Set(["a", "e", "i", "o", "u"]);
+const VOWELS_WITH_MACRON = new Set(["a", "e", "i", "o", "u", "ō"]);
+const CONSONANTS_WITH_VOWEL = new Set(["r", "y", "m", "n", "h", "k"]);
+const W_VOWELS = new Set(["a", "o", "ō"]);
+const T_VOWELS = new Set(["a", "e", "o", "ō"]);
+const S_VOWELS = new Set(["a", "u", "e", "o", "ō"]);
+
 export function extractActorsAndStyles(content: string): ExtractedMetadata {
 	const actorsSet = new Set<string>();
 	const stylesSet = new Set<string>();
 	const lines = content.split(/\r?\n/);
 
-	for (const line of lines) {
-		const input = line.trim();
+	for (let i = 0; i < lines.length; i++) {
+		const input = lines[i].trim();
 
-		if (!input.startsWith("Dialogue:") && !input.startsWith("Comment:")) {
+		// Quick check first character before doing full startsWith
+		const firstChar = input[0];
+		if (firstChar !== "D" && firstChar !== "C") continue;
+		if (!input.startsWith("Dialogue:") && !input.startsWith("Comment:"))
 			continue;
-		}
 
 		const inputarray = input.split(",");
 		if (inputarray.length >= 10) {
 			const style = inputarray[3]?.trim();
 			const actor = inputarray[4]?.trim();
-
-			if (style) {
-				stylesSet.add(style);
-			}
-			if (actor) {
-				actorsSet.add(actor);
-			}
+			if (style) stylesSet.add(style);
+			if (actor) actorsSet.add(actor);
 		}
 	}
 
@@ -38,323 +53,189 @@ export function extractActorsAndStyles(content: string): ExtractedMetadata {
 }
 
 export function aegiTimeTOds(timestr: string): number {
-	const [h, m, sms] = timestr.split(":");
-	const [s, ms] = sms.split(".");
-	// Python: int(ms) + (int(h) * 3600 + int(m) * 60 + int(s)) * 100
-	// Note: Python's int(ms) on "00" is 0.
-	// If ms is "50", int("50") is 50.
-	// In the python script, ms seems to be centiseconds (cs) or similar if it's .ass format?
-	// Standard .ass format is h:mm:ss.cc (centiseconds).
-	// Let's assume input is strictly formatted like the python script expects.
+	// Optimized: avoid creating intermediate arrays when possible
+	const colonIdx1 = timestr.indexOf(":");
+	const colonIdx2 = timestr.indexOf(":", colonIdx1 + 1);
+	const dotIdx = timestr.indexOf(".");
 
-	return (
-		parseInt(ms, 10) +
-		(parseInt(h, 10) * 3600 + parseInt(m, 10) * 60 + parseInt(s, 10)) * 100
-	);
+	const h = parseInt(timestr.substring(0, colonIdx1), 10);
+	const m = parseInt(timestr.substring(colonIdx1 + 1, colonIdx2), 10);
+	const s = parseInt(timestr.substring(colonIdx2 + 1, dotIdx), 10);
+	const ms = parseInt(timestr.substring(dotIdx + 1), 10);
+
+	return ms + (h * 3600 + m * 60 + s) * 100;
 }
 
 export function str_TOkara_array(karaText: string, mode: SplitMode): string[] {
-	if (mode === "char") {
-		return k_array_char(karaText);
+	switch (mode) {
+		case "char":
+			return k_array_char(karaText);
+		case "word":
+			return k_array_word(karaText);
+		case "syl":
+			return k_array_syl(karaText);
+		default:
+			return [];
 	}
-	if (mode === "word") {
-		return k_array_word(karaText);
-	}
-	if (mode === "syl") {
-		return k_array_syl(karaText);
-	}
-	return [];
 }
 
 export function k_array_char(karaText: string): string[] {
-	const karaSplit_array: string[] = [];
-	for (const letter of karaText) {
-		if ([" ", "!", "?", ",", ";", ":"].includes(letter)) {
-			if (karaSplit_array.length > 0) {
-				karaSplit_array[karaSplit_array.length - 1] =
-					karaSplit_array[karaSplit_array.length - 1] + letter;
+	const result: string[] = [];
+	const len = karaText.length;
+
+	for (let i = 0; i < len; i++) {
+		const letter = karaText[i];
+		if (PUNCTUATION_CHARS.has(letter)) {
+			if (result.length > 0) {
+				result[result.length - 1] += letter;
 			} else {
-				karaSplit_array.push(letter);
+				result.push(letter);
 			}
 		} else {
-			karaSplit_array.push(letter);
+			result.push(letter);
 		}
 	}
-	return karaSplit_array;
+	return result;
 }
 
 export function k_array_word(karaText: string): string[] {
-	const karaSplit_array: string[] = [];
-	const _array_nospace = karaText.split(/\s+/).filter(Boolean); // Python split() splits by whitespace
-	// Python: array_nospace = karaText.split()
-	// Python's split() without arguments splits by any whitespace and discards empty strings.
-	// JS split(' ') preserves empty strings if multiple spaces.
-	// We should match Python's behavior.
+	const trimmed = karaText.trim();
+	if (!trimmed) return [];
 
-	// Actually, let's look at the python code:
-	// array_nospace = karaText.split()
-	// for i in range(len(array_nospace)):
-	//    karaSplit_array.append(array_nospace[i] + " ")
+	const words = trimmed.split(/\s+/);
+	const result = new Array<string>(words.length);
 
-	// Wait, if I split by space, I lose the spaces. The python script appends " " to every word.
-	// This implies the output always has a trailing space for every word.
-
-	const words = karaText.trim().split(/\s+/);
-	if (words.length === 1 && words[0] === "") return [];
-
-	for (const word of words) {
-		karaSplit_array.push(`${word} `);
+	for (let i = 0; i < words.length; i++) {
+		result[i] = `${words[i]} `;
 	}
-
-	return karaSplit_array;
+	return result;
 }
 
 export function k_array_syl(karaText: string): string[] {
-	const karaSplit_array: string[] = [];
+	const result: string[] = [];
 	const ln = karaText.length;
 	let l = 0;
 
 	while (l < ln) {
 		const letter = karaText[l];
-		let letter1 = "";
-		if (l + 1 < ln) {
-			letter1 = karaText[l + 1];
-		}
-
+		const letter1 = l + 1 < ln ? karaText[l + 1] : "";
 		const lowerLetter = letter.toLowerCase();
 		const lowerLetter1 = letter1.toLowerCase();
 
-		if ("rymnhk".includes(lowerLetter)) {
-			if ("aeiouō".includes(lowerLetter1)) {
-				karaSplit_array.push(letter + letter1);
-				l = l + 2;
+		if (CONSONANTS_WITH_VOWEL.has(lowerLetter)) {
+			if (VOWELS_WITH_MACRON.has(lowerLetter1)) {
+				result.push(letter + letter1);
+				l += 2;
 			} else {
-				karaSplit_array.push(letter);
-				l = l + 1;
+				result.push(letter);
+				l++;
 			}
 		} else if (lowerLetter === "w") {
-			if ("aoō".includes(lowerLetter1)) {
-				karaSplit_array.push(letter + letter1);
-				l = l + 2;
+			if (W_VOWELS.has(lowerLetter1)) {
+				result.push(letter + letter1);
+				l += 2;
 			} else {
-				karaSplit_array.push(letter);
-				l = l + 1;
+				result.push(letter);
+				l++;
 			}
 		} else if (lowerLetter === "t") {
-			if ("aeoō".includes(lowerLetter1)) {
-				karaSplit_array.push(letter + letter1);
-				l = l + 2;
+			if (T_VOWELS.has(lowerLetter1)) {
+				result.push(letter + letter1);
+				l += 2;
 			} else if (lowerLetter1 === "s") {
 				if (l + 2 < ln) {
-					const letter2 = karaText[l + 2];
-					karaSplit_array.push(letter + letter1 + letter2);
-				} else {
-					// Fallback if not enough chars? Python code:
-					// if 0 <= l + 2 < len(karaText): ...
-					// It doesn't handle the else case explicitly for the append,
-					// but it does l = l + 3.
-					// Wait, if l+2 is out of bounds, it doesn't append anything?
-					// Python:
-					// if 0 <= l + 2 < len(karaText):
-					//    letter2 = karaText[l + 2]
-					//    karaSplit_array.append(letter + letter1 + letter2)
-					// l = l + 3
-
-					// If l+2 is out of bounds, it increments l by 3 and appends NOTHING.
-					// This seems like a bug or edge case in the original script, but I should probably replicate it or fix it safely.
-					// If l+2 is out of bounds, l+1 is the last char.
-					// So we are at "ts" at the end of string.
-					// If we skip 3, we finish the loop.
-					// So "ts" at end of string is ignored?
-					// Let's assume valid input for now or try to be safe.
-					// I will replicate the logic but maybe add a check.
-					if (l + 2 < ln) {
-						const letter2 = karaText[l + 2];
-						karaSplit_array.push(letter + letter1 + letter2);
-					}
+					result.push(letter + letter1 + karaText[l + 2]);
 				}
-				l = l + 3;
+				l += 3;
 			} else {
-				karaSplit_array.push(letter);
-				l = l + 1;
+				result.push(letter);
+				l++;
 			}
 		} else if (lowerLetter === "c") {
 			if (lowerLetter1 === "h") {
 				if (l + 2 < ln) {
-					const letter2 = karaText[l + 2];
-					karaSplit_array.push(letter + letter1 + letter2);
+					result.push(letter + letter1 + karaText[l + 2]);
 				}
-				l = l + 3;
+				l += 3;
 			} else {
-				karaSplit_array.push(letter + letter1);
-				l = l + 2;
+				result.push(letter + letter1);
+				l += 2;
 			}
 		} else if (lowerLetter === "s") {
-			if ("aueoō".includes(lowerLetter1)) {
-				karaSplit_array.push(letter + letter1);
-				l = l + 2;
+			if (S_VOWELS.has(lowerLetter1)) {
+				result.push(letter + letter1);
+				l += 2;
 			} else if (lowerLetter1 === "h") {
 				if (l + 2 < ln) {
-					const letter2 = karaText[l + 2];
-					karaSplit_array.push(letter + letter1 + letter2);
+					result.push(letter + letter1 + karaText[l + 2]);
 				}
-				l = l + 3;
+				l += 3;
 			} else {
-				karaSplit_array.push(letter);
-				l = l + 1;
+				result.push(letter);
+				l++;
 			}
 		} else if (lowerLetter === "f") {
 			if (lowerLetter1 === "u") {
-				// Python: if letter1 == "u": (case sensitive in python script? No, it says letter1 without lower())
-				// Python: if letter1 == "u":
-				// But earlier: letter1 = karaText[l + 1]
-				// So it is case sensitive for 'u'.
-				karaSplit_array.push(letter + letter1);
-				l = l + 2;
+				result.push(letter + letter1);
+				l += 2;
 			} else {
-				karaSplit_array.push(letter);
-				l = l + 1;
+				result.push(letter);
+				l++;
 			}
-		} else if ("aeiou".includes(lowerLetter)) {
-			if ("aeiou".includes(lowerLetter1)) {
-				karaSplit_array.push(letter);
-				l = l + 1;
-			} else {
-				karaSplit_array.push(letter);
-				l = l + 1;
-			}
+		} else if (VOWELS.has(lowerLetter)) {
+			result.push(letter);
+			l++;
 		} else if (letter === "{") {
+			// Handle bracket content - attach to previous element or push new
+			const startIdx = result.length > 0 ? result.length - 1 : -1;
+			if (startIdx >= 0) {
+				result[startIdx] += letter;
+			} else {
+				result.push(letter);
+			}
+
 			let nxindx = 1;
-			if (karaSplit_array.length > 0) {
-				karaSplit_array[karaSplit_array.length - 1] += letter;
+			const lastIdx = result.length - 1;
+			while (l + nxindx < ln) {
+				const ltr = karaText[l + nxindx];
+				result[lastIdx] += ltr;
+				nxindx++;
+				if (ltr === "}") break;
+			}
+			l += nxindx;
+		} else if (PUNCTUATION_CHARS_WITH_BRACE.has(letter)) {
+			if (result.length > 0) {
+				result[result.length - 1] += letter;
 			} else {
-				karaSplit_array.push(letter);
+				result.push(letter);
 			}
-
-			if (l + nxindx < ln) {
-				let ltr = karaText[l + nxindx];
-				while (ltr !== "}") {
-					// In python: ltr = karaText[l + nxindx] is updated inside loop?
-					// Python:
-					// ltr = karaText[l + nxindx]
-					// while ltr != "}":
-					//    ltr = karaText[l + nxindx]  <-- this is just getting the same char if nxindx doesn't change before this line?
-					//    ...
-					//    nxindx = nxindx + 1
-
-					// It updates nxindx, then checks loop condition with OLD ltr?
-					// No, ltr is updated at start of loop in Python?
-					// Python:
-					// if l + nxindx < len(karaText):
-					//    ltr = karaText[l + nxindx]
-					//    while ltr != "}":
-					//        ltr = karaText[l + nxindx]  <-- Updates ltr based on CURRENT nxindx
-					//        karaSplit_array[...] += ltr
-					//        nxindx = nxindx + 1
-					//        if not ... break
-
-					// So it appends the char, THEN increments.
-					// Wait, the first char (at nxindx=1) is assigned to ltr before loop.
-					// Inside loop, it re-assigns ltr (redundant for first iter), appends it, then increments.
-					// So it appends everything until '}' is found?
-					// But it checks `ltr != "}"`.
-					// If the first char is '}', loop doesn't run.
-					// If first char is 'k', loop runs.
-					// Inside: ltr='k', append 'k', nxindx=2.
-					// Next iter: ltr='a' (if next is 'a'), append 'a', nxindx=3.
-					// ...
-					// If it encounters '}', ltr becomes '}'.
-					// Loop condition `ltr != "}"` is checked at start.
-					// So if ltr becomes '}', the loop terminates?
-					// BUT, the assignment `ltr = karaText[l + nxindx]` happens INSIDE the loop at the top.
-					// So if we are at '}', we assign ltr='}', append '}', increment.
-					// Then loop checks `ltr != "}"` -> False -> Exit.
-					// So '}' IS appended.
-
-					ltr = karaText[l + nxindx];
-					karaSplit_array[karaSplit_array.length - 1] += ltr;
-					nxindx++;
-					if (!(l + nxindx < ln)) break;
-
-					// We need to check if the NEW ltr is '}' to break?
-					// The python loop structure is:
-					// while ltr != "}":
-					//    ltr = ... (get char)
-					//    append ltr
-					//    increment
-
-					// If the char retrieved is '}', it is appended, and then the loop checks `}` != `}` which is false, so it stops.
-					// So yes, '}' is included.
-
-					if (ltr === "}") break; // Wait, if I break here, I already appended it.
-					// The python `while` check happens BEFORE the body.
-					// But `ltr` is updated INSIDE the body.
-					// So:
-					// 1. Init ltr (e.g. 'k')
-					// 2. 'k' != '}' -> True
-					// 3. Update ltr = 'k'
-					// 4. Append 'k'
-					// 5. Increment
-					// ...
-					// N. Init ltr (from previous iter? No, it's a local var in python loop scope? No, python vars are function scope)
-					// The `ltr` variable holds the value from the LAST iteration check?
-					// No, `ltr` is updated at the very first line of the while block.
-					// So the `while ltr != "}"` check uses the value from the PREVIOUS iteration (or the init).
-
-					// Example: "{k}"
-					// l points to '{'.
-					// Append '{'.
-					// nxindx = 1.
-					// ltr = 'k'.
-					// Loop: 'k' != '}' -> True.
-					//   ltr = 'k'.
-					//   Append 'k'.
-					//   nxindx = 2.
-					//   Next char is '}'.
-					// Loop: 'k' != '}' -> True (ltr is still 'k' from line 136 in prev iter? No, line 136 updates it).
-					//   ltr = '}'.
-					//   Append '}'.
-					//   nxindx = 3.
-					// Loop: '}' != '}' -> False.
-					// Break.
-
-					// So yes, '}' is appended.
-				}
-			}
-			l = l + nxindx;
-		} else if ([" ", "!", "?", ",", ";", ":", "}"].includes(letter)) {
-			if (karaSplit_array.length > 0) {
-				karaSplit_array[karaSplit_array.length - 1] += letter;
-				l = l + 1;
-			} else {
-				karaSplit_array.push(letter);
-				l = l + 1;
-			}
+			l++;
 		} else {
-			if ("aeiou".includes(lowerLetter1)) {
-				karaSplit_array.push(letter + letter1);
-				l = l + 2;
+			if (VOWELS.has(lowerLetter1)) {
+				result.push(letter + letter1);
+				l += 2;
 			} else {
-				karaSplit_array.push(letter);
-				l = l + 1;
+				result.push(letter);
+				l++;
 			}
 		}
 	}
 
-	return karaSplit_array;
+	return result;
 }
 
 export function arrTOk_str(
 	karaSplit_array: string[],
 	timePerletter: number,
 ): string {
-	let finalKaraStr = "";
-	for (const syl of karaSplit_array) {
-		const l = timePerletter * syl.length;
-		const k = `{\\k${l}}`;
-		finalKaraStr += k + syl;
+	// Pre-calculate total length for better string allocation
+	const parts = new Array<string>(karaSplit_array.length * 2);
+	for (let i = 0; i < karaSplit_array.length; i++) {
+		const syl = karaSplit_array[i];
+		parts[i * 2] = `{\\k${timePerletter * syl.length}}`;
+		parts[i * 2 + 1] = syl;
 	}
-	return finalKaraStr;
+	return parts.join("");
 }
 
 export interface ProcessOptions {
@@ -371,40 +252,48 @@ export function processAssFile(
 	const outputLines: string[] = [];
 	let counter = 0;
 
-	for (const line of lines) {
-		const input = line.trim();
+	// Cache selector info outside loop
+	const isActorSelector = options.selector === "actor";
+	const isStyleSelector = options.selector === "style";
+	const isAllSelector = options.selector === "all";
+	const optionsSelectorValue = (options.selectorValue || "").toLowerCase();
 
-		// Validation: Only accept lines starting with "Dialogue:" or "Comment:"
-		if (!input.startsWith("Dialogue:") && !input.startsWith("Comment:")) {
-			continue;
-		}
+	for (let i = 0; i < lines.length; i++) {
+		const input = lines[i].trim();
 
-		if (input.startsWith("Dialogue:")) {
-			// Python: input.split(",", 9) -> maxsplit 9
+		// Quick first-char check before expensive startsWith
+		const firstChar = input[0];
+		if (firstChar !== "D" && firstChar !== "C") continue;
+
+		const isDialogue = input.startsWith("Dialogue:");
+		const isComment = !isDialogue && input.startsWith("Comment:");
+
+		if (!isDialogue && !isComment) continue;
+
+		if (isDialogue) {
 			const inputarray = input.split(",");
-			// We need to handle the maxsplit behavior manually if we want to preserve commas in the text
-			// The text is the 10th element (index 9).
-			// So we take the first 9 elements, and the rest is the text.
 
 			if (inputarray.length >= 10) {
 				const first9 = inputarray.slice(0, 9);
-				const karaRawText = inputarray.slice(9).join(","); // Re-join the rest
+				const karaRawText = inputarray.slice(9).join(",");
 
-				let match = "";
-				let selectorValue = options.selectorValue || "";
+				let match: string;
+				let selectorValue: string;
 
-				if (options.selector === "actor") {
+				if (isActorSelector) {
 					match = first9[4];
-				} else if (options.selector === "style") {
+					selectorValue = optionsSelectorValue;
+				} else if (isStyleSelector) {
 					match = first9[3];
-				} else if (options.selector === "all") {
-					match = "True";
-					selectorValue = "True";
+					selectorValue = optionsSelectorValue;
+				} else {
+					match = "true";
+					selectorValue = "true";
 				}
 
 				let finalKaraStr = input;
 
-				if (match.toLowerCase() === selectorValue.toLowerCase()) {
+				if (match.toLowerCase() === selectorValue) {
 					const duration_ds = aegiTimeTOds(first9[2]) - aegiTimeTOds(first9[1]);
 					const text_len = karaRawText.length;
 					counter++;
@@ -413,11 +302,8 @@ export function processAssFile(
 						const timePerletter = Math.floor(duration_ds / text_len);
 						const karaSplit_array = str_TOkara_array(karaRawText, options.mode);
 
-						let prefix = "";
-						for (let x = 0; x < 9; x++) {
-							prefix += `${first9[x]},`;
-						}
-
+						// Build prefix more efficiently with join
+						const prefix = first9.join(",") + ",";
 						finalKaraStr = prefix + arrTOk_str(karaSplit_array, timePerletter);
 					}
 				}
@@ -426,7 +312,6 @@ export function processAssFile(
 				outputLines.push(input);
 			}
 		} else {
-			// It's a Comment: line, preserve it
 			outputLines.push(input);
 		}
 	}
