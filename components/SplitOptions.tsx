@@ -9,6 +9,8 @@ interface SplitOptionsProps {
 	setSelectorValue: (value: string) => void;
 	actorOptions: string[];
 	styleOptions: string[];
+	cleanKTime: boolean;
+	setCleanKTime: (enabled: boolean) => void;
 }
 
 export function SplitOptions({
@@ -20,6 +22,8 @@ export function SplitOptions({
 	setSelectorValue,
 	actorOptions,
 	styleOptions,
+	cleanKTime,
+	setCleanKTime,
 }: SplitOptionsProps) {
 	const currentOptions = selector === "actor" ? actorOptions : styleOptions;
 	const hasOptions = currentOptions.length > 0;
@@ -30,7 +34,9 @@ export function SplitOptions({
 				<h3 className="text-lg font-semibold mb-3 text-gray-800">
 					Splitting Mode
 				</h3>
-				<div className="flex flex-wrap gap-4">
+				<div
+					className={`flex flex-wrap gap-4 transition-opacity ${cleanKTime ? "opacity-50 pointer-events-none" : ""}`}
+				>
 					{(["syl", "char", "word"] as SplitMode[]).map((m) => (
 						<label
 							key={m}
@@ -54,6 +60,29 @@ export function SplitOptions({
 						</label>
 					))}
 				</div>
+			</div>
+
+			<div
+				className={`p-2 rounded-lg transition-colors ${cleanKTime ? "bg-blue-50 border-blue-200" : "bg-gray-50 border-gray-200"}`}
+			>
+				<label className="flex items-center justify-between cursor-pointer group">
+					<div>
+						<span
+							className={`font-small block ${cleanKTime ? "text-blue-900" : "text-gray-700"}`}
+						>
+							Cleaner (De-Ktime)
+						</span>
+					</div>
+					<div className="relative">
+						<input
+							type="checkbox"
+							checked={cleanKTime}
+							onChange={(e) => setCleanKTime(e.target.checked)}
+							className="sr-only peer"
+						/>
+						<div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+					</div>
+				</label>
 			</div>
 
 			<div>

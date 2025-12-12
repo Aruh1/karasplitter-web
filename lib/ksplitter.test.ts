@@ -255,4 +255,48 @@ describe("ksplitter", () => {
 			expect(result.content).not.toContain("Invalid Line");
 		});
 	});
+	describe("cleanKTime mode", () => {
+		it("should remove all karaoke tags when cleanKTime is true", () => {
+			const input =
+				"Dialogue: 0,0:00:00.00,0:00:05.00,Default,Singer1,0,0,0,,{\\k50}He{\\k50}llo";
+			const result = processAssFile(input, {
+				mode: "syl",
+				selector: "all",
+				cleanKTime: true,
+			});
+
+			expect(result.error).toBeNull();
+			// Should retain the prefix but strip tags from text
+			expect(result.content).toBe(
+				"Dialogue: 0,0:00:00.00,0:00:05.00,Default,Singer1,0,0,0,,Hello",
+			);
+		});
+
+		it("should handle various tag formats", () => {
+			const input =
+				"Dialogue: 0,0:00:00.00,0:00:05.00,Default,Singer1,0,0,0,,{\\K50}W{\\kf50}or{\\ko50}ld";
+			const result = processAssFile(input, {
+				mode: "syl",
+				selector: "all",
+				cleanKTime: true,
+			});
+			expect(result.content).toBe(
+				"Dialogue: 0,0:00:00.00,0:00:05.00,Default,Singer1,0,0,0,,World",
+			);
+		});
+
+		it("should ignore splitting mode when cleanKTime is true", () => {
+			const input =
+				"Dialogue: 0,0:00:00.00,0:00:05.00,Default,Singer1,0,0,0,,Hello World";
+			// Even with 'char' mode, it should not split if cleanKTime is true
+			const result = processAssFile(input, {
+				mode: "char",
+				selector: "all",
+				cleanKTime: true,
+			});
+			expect(result.content).toBe(
+				"Dialogue: 0,0:00:00.00,0:00:05.00,Default,Singer1,0,0,0,,Hello World",
+			);
+		});
+	});
 });

@@ -107,9 +107,15 @@ export default function HowToUse() {
 										Select Split Mode
 									</h3>
 									<p className="text-gray-600 text-sm">
-										Choose how you want to split the lyrics:
+										Choose how you want to split the lyrics or simply clean
+										them:
 									</p>
 									<ul className="list-disc list-inside text-sm text-gray-600 mt-2 ml-1 space-y-1">
+										<li>
+											<strong>Remove Karaoke Tags (De-ktime)</strong>: Check
+											this box to strip all existing timing tags from the
+											selected lines.
+										</li>
 										<li>
 											<strong>Syllables (syl)</strong>: Smarter splitting based
 											on Japanese romaji rules (e.g., "ka", "shi", "tsu").

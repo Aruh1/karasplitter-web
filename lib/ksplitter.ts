@@ -1,11 +1,6 @@
 export type SplitMode = "char" | "word" | "syl";
 
-export interface ExtractedMetadata {
-	actors: string[];
-	styles: string[];
-}
-
-// Pre-computed character sets for O(1) lookup instead of O(n) string.includes()
+// Pre-computed character sets for O(1) lookup
 const PUNCTUATION_CHARS = new Set([" ", "!", "?", ",", ";", ":"]);
 const PUNCTUATION_CHARS_WITH_BRACE = new Set([
 	" ",
@@ -22,16 +17,24 @@ const CONSONANTS_WITH_VOWEL = new Set(["r", "y", "m", "n", "h", "k"]);
 const W_VOWELS = new Set(["a", "o", "ō"]);
 const T_VOWELS = new Set(["a", "e", "o", "ō"]);
 const S_VOWELS = new Set(["a", "u", "e", "o", "ō"]);
+const KTIME_REGEX = /\{\\[kK][fo]?\d*\}/g;
+
+export function deKtime(text: string): string {
+	return text.replace(KTIME_REGEX, "");
+}
+
+export interface ExtractedMetadata {
+	actors: string[];
+	styles: string[];
+}
 
 export function extractActorsAndStyles(content: string): ExtractedMetadata {
 	const actorsSet = new Set<string>();
 	const stylesSet = new Set<string>();
 	const lines = content.split(/\r?\n/);
 
-	for (let i = 0; i < lines.length; i++) {
-		const input = lines[i].trim();
-
-		// Quick check first character before doing full startsWith
+	for (const line of lines) {
+		const input = line.trim();
 		const firstChar = input[0];
 		if (firstChar !== "D" && firstChar !== "C") continue;
 		if (!input.startsWith("Dialogue:") && !input.startsWith("Comment:"))
@@ -47,52 +50,38 @@ export function extractActorsAndStyles(content: string): ExtractedMetadata {
 	}
 
 	return {
-		actors: Array.from(actorsSet).sort(),
-		styles: Array.from(stylesSet).sort(),
+		actors: [...actorsSet].sort(),
+		styles: [...stylesSet].sort(),
 	};
 }
 
 export function aegiTimeTOds(timestr: string): number {
-	// Optimized: avoid creating intermediate arrays when possible
-	const colonIdx1 = timestr.indexOf(":");
-	const colonIdx2 = timestr.indexOf(":", colonIdx1 + 1);
-	const dotIdx = timestr.indexOf(".");
+	const c1 = timestr.indexOf(":");
+	const c2 = timestr.indexOf(":", c1 + 1);
+	const d = timestr.indexOf(".");
 
-	const h = parseInt(timestr.substring(0, colonIdx1), 10);
-	const m = parseInt(timestr.substring(colonIdx1 + 1, colonIdx2), 10);
-	const s = parseInt(timestr.substring(colonIdx2 + 1, dotIdx), 10);
-	const ms = parseInt(timestr.substring(dotIdx + 1), 10);
+	const h = +timestr.slice(0, c1);
+	const m = +timestr.slice(c1 + 1, c2);
+	const s = +timestr.slice(c2 + 1, d);
+	const ms = +timestr.slice(d + 1);
 
 	return ms + (h * 3600 + m * 60 + s) * 100;
 }
 
 export function str_TOkara_array(karaText: string, mode: SplitMode): string[] {
-	switch (mode) {
-		case "char":
-			return k_array_char(karaText);
-		case "word":
-			return k_array_word(karaText);
-		case "syl":
-			return k_array_syl(karaText);
-		default:
-			return [];
-	}
+	if (mode === "char") return k_array_char(karaText);
+	if (mode === "word") return k_array_word(karaText);
+	if (mode === "syl") return k_array_syl(karaText);
+	return [];
 }
 
 export function k_array_char(karaText: string): string[] {
 	const result: string[] = [];
-	const len = karaText.length;
-
-	for (let i = 0; i < len; i++) {
-		const letter = karaText[i];
-		if (PUNCTUATION_CHARS.has(letter)) {
-			if (result.length > 0) {
-				result[result.length - 1] += letter;
-			} else {
-				result.push(letter);
-			}
+	for (const char of karaText) {
+		if (PUNCTUATION_CHARS.has(char) && result.length > 0) {
+			result[result.length - 1] += char;
 		} else {
-			result.push(letter);
+			result.push(char);
 		}
 	}
 	return result;
@@ -101,14 +90,7 @@ export function k_array_char(karaText: string): string[] {
 export function k_array_word(karaText: string): string[] {
 	const trimmed = karaText.trim();
 	if (!trimmed) return [];
-
-	const words = trimmed.split(/\s+/);
-	const result = new Array<string>(words.length);
-
-	for (let i = 0; i < words.length; i++) {
-		result[i] = `${words[i]} `;
-	}
-	return result;
+	return trimmed.split(/\s+/).map((w) => `${w} `);
 }
 
 export function k_array_syl(karaText: string): string[] {
@@ -117,105 +99,101 @@ export function k_array_syl(karaText: string): string[] {
 	let l = 0;
 
 	while (l < ln) {
-		const letter = karaText[l];
-		const letter1 = l + 1 < ln ? karaText[l + 1] : "";
-		const lowerLetter = letter.toLowerCase();
-		const lowerLetter1 = letter1.toLowerCase();
+		const char = karaText[l];
+		const nextChar = karaText[l + 1] ?? "";
+		const lc = char.toLowerCase();
+		const lnc = nextChar.toLowerCase();
 
-		if (CONSONANTS_WITH_VOWEL.has(lowerLetter)) {
-			if (VOWELS_WITH_MACRON.has(lowerLetter1)) {
-				result.push(letter + letter1);
-				l += 2;
-			} else {
-				result.push(letter);
-				l++;
-			}
-		} else if (lowerLetter === "w") {
-			if (W_VOWELS.has(lowerLetter1)) {
-				result.push(letter + letter1);
-				l += 2;
-			} else {
-				result.push(letter);
-				l++;
-			}
-		} else if (lowerLetter === "t") {
-			if (T_VOWELS.has(lowerLetter1)) {
-				result.push(letter + letter1);
-				l += 2;
-			} else if (lowerLetter1 === "s") {
-				if (l + 2 < ln) {
-					result.push(letter + letter1 + karaText[l + 2]);
-				}
-				l += 3;
-			} else {
-				result.push(letter);
-				l++;
-			}
-		} else if (lowerLetter === "c") {
-			if (lowerLetter1 === "h") {
-				if (l + 2 < ln) {
-					result.push(letter + letter1 + karaText[l + 2]);
-				}
-				l += 3;
-			} else {
-				result.push(letter + letter1);
-				l += 2;
-			}
-		} else if (lowerLetter === "s") {
-			if (S_VOWELS.has(lowerLetter1)) {
-				result.push(letter + letter1);
-				l += 2;
-			} else if (lowerLetter1 === "h") {
-				if (l + 2 < ln) {
-					result.push(letter + letter1 + karaText[l + 2]);
-				}
-				l += 3;
-			} else {
-				result.push(letter);
-				l++;
-			}
-		} else if (lowerLetter === "f") {
-			if (lowerLetter1 === "u") {
-				result.push(letter + letter1);
-				l += 2;
-			} else {
-				result.push(letter);
-				l++;
-			}
-		} else if (VOWELS.has(lowerLetter)) {
-			result.push(letter);
-			l++;
-		} else if (letter === "{") {
-			// Handle bracket content - attach to previous element or push new
-			const startIdx = result.length > 0 ? result.length - 1 : -1;
-			if (startIdx >= 0) {
-				result[startIdx] += letter;
-			} else {
-				result.push(letter);
-			}
-
-			let nxindx = 1;
-			const lastIdx = result.length - 1;
-			while (l + nxindx < ln) {
-				const ltr = karaText[l + nxindx];
-				result[lastIdx] += ltr;
-				nxindx++;
-				if (ltr === "}") break;
-			}
-			l += nxindx;
-		} else if (PUNCTUATION_CHARS_WITH_BRACE.has(letter)) {
+		// Handle bracket content
+		if (char === "{") {
+			const closeIdx = karaText.indexOf("}", l);
+			const bracketContent =
+				closeIdx !== -1 ? karaText.slice(l, closeIdx + 1) : karaText.slice(l);
 			if (result.length > 0) {
-				result[result.length - 1] += letter;
+				result[result.length - 1] += bracketContent;
 			} else {
-				result.push(letter);
+				result.push(bracketContent);
 			}
+			l = closeIdx !== -1 ? closeIdx + 1 : ln;
+			continue;
+		}
+
+		// Handle punctuation
+		if (PUNCTUATION_CHARS_WITH_BRACE.has(char)) {
+			if (result.length > 0) {
+				result[result.length - 1] += char;
+			} else {
+				result.push(char);
+			}
+			l++;
+			continue;
+		}
+
+		// Syllable patterns
+		if (CONSONANTS_WITH_VOWEL.has(lc)) {
+			if (VOWELS_WITH_MACRON.has(lnc)) {
+				result.push(char + nextChar);
+				l += 2;
+			} else {
+				result.push(char);
+				l++;
+			}
+		} else if (lc === "w") {
+			if (W_VOWELS.has(lnc)) {
+				result.push(char + nextChar);
+				l += 2;
+			} else {
+				result.push(char);
+				l++;
+			}
+		} else if (lc === "t") {
+			if (T_VOWELS.has(lnc)) {
+				result.push(char + nextChar);
+				l += 2;
+			} else if (lnc === "s" && l + 2 < ln) {
+				result.push(char + nextChar + karaText[l + 2]);
+				l += 3;
+			} else {
+				result.push(char);
+				l++;
+			}
+		} else if (lc === "c") {
+			if (lnc === "h" && l + 2 < ln) {
+				result.push(char + nextChar + karaText[l + 2]);
+				l += 3;
+			} else {
+				result.push(char + nextChar);
+				l += 2;
+			}
+		} else if (lc === "s") {
+			if (S_VOWELS.has(lnc)) {
+				result.push(char + nextChar);
+				l += 2;
+			} else if (lnc === "h" && l + 2 < ln) {
+				result.push(char + nextChar + karaText[l + 2]);
+				l += 3;
+			} else {
+				result.push(char);
+				l++;
+			}
+		} else if (lc === "f") {
+			if (lnc === "u") {
+				result.push(char + nextChar);
+				l += 2;
+			} else {
+				result.push(char);
+				l++;
+			}
+		} else if (VOWELS.has(lc)) {
+			result.push(char);
 			l++;
 		} else {
-			if (VOWELS.has(lowerLetter1)) {
-				result.push(letter + letter1);
+			// Default: check if next is a vowel
+			if (VOWELS.has(lnc)) {
+				result.push(char + nextChar);
 				l += 2;
 			} else {
-				result.push(letter);
+				result.push(char);
 				l++;
 			}
 		}
@@ -228,20 +206,22 @@ export function arrTOk_str(
 	karaSplit_array: string[],
 	timePerletter: number,
 ): string {
-	// Pre-calculate total length for better string allocation
-	const parts = new Array<string>(karaSplit_array.length * 2);
-	for (let i = 0; i < karaSplit_array.length; i++) {
+	const len = karaSplit_array.length;
+	if (len === 0) return "";
+
+	let result = "";
+	for (let i = 0; i < len; i++) {
 		const syl = karaSplit_array[i];
-		parts[i * 2] = `{\\k${timePerletter * syl.length}}`;
-		parts[i * 2 + 1] = syl;
+		result += `{\\k${timePerletter * syl.length}}${syl}`;
 	}
-	return parts.join("");
+	return result;
 }
 
 export interface ProcessOptions {
 	selector: "all" | "actor" | "style";
 	selectorValue?: string;
 	mode: SplitMode;
+	cleanKTime?: boolean;
 }
 
 export function processAssFile(
@@ -252,17 +232,15 @@ export function processAssFile(
 	const outputLines: string[] = [];
 	let counter = 0;
 
-	// Cache selector info outside loop
 	const isActorSelector = options.selector === "actor";
 	const isStyleSelector = options.selector === "style";
-	const isAllSelector = options.selector === "all";
-	const optionsSelectorValue = (options.selectorValue || "").toLowerCase();
+	const selectorValueLower = (options.selectorValue ?? "").toLowerCase();
+	const cleanMode = options.cleanKTime === true;
 
-	for (let i = 0; i < lines.length; i++) {
-		const input = lines[i].trim();
-
-		// Quick first-char check before expensive startsWith
+	for (const line of lines) {
+		const input = line.trim();
 		const firstChar = input[0];
+
 		if (firstChar !== "D" && firstChar !== "C") continue;
 
 		const isDialogue = input.startsWith("Dialogue:");
@@ -271,43 +249,39 @@ export function processAssFile(
 		if (!isDialogue && !isComment) continue;
 
 		if (isDialogue) {
-			const inputarray = input.split(",");
+			const parts = input.split(",");
 
-			if (inputarray.length >= 10) {
-				const first9 = inputarray.slice(0, 9);
-				const karaRawText = inputarray.slice(9).join(",");
+			if (parts.length >= 10) {
+				const prefix = parts.slice(0, 9).join(",") + ",";
+				const karaRawText = parts.slice(9).join(",");
 
-				let match: string;
-				let selectorValue: string;
-
+				let shouldProcess: boolean;
 				if (isActorSelector) {
-					match = first9[4];
-					selectorValue = optionsSelectorValue;
+					shouldProcess = parts[4].toLowerCase() === selectorValueLower;
 				} else if (isStyleSelector) {
-					match = first9[3];
-					selectorValue = optionsSelectorValue;
+					shouldProcess = parts[3].toLowerCase() === selectorValueLower;
 				} else {
-					match = "true";
-					selectorValue = "true";
+					shouldProcess = true;
 				}
 
-				let finalKaraStr = input;
-
-				if (match.toLowerCase() === selectorValue) {
-					const duration_ds = aegiTimeTOds(first9[2]) - aegiTimeTOds(first9[1]);
-					const text_len = karaRawText.length;
+				if (shouldProcess) {
 					counter++;
-
-					if (text_len > 0) {
-						const timePerletter = Math.floor(duration_ds / text_len);
-						const karaSplit_array = str_TOkara_array(karaRawText, options.mode);
-
-						// Build prefix more efficiently with join
-						const prefix = first9.join(",") + ",";
-						finalKaraStr = prefix + arrTOk_str(karaSplit_array, timePerletter);
+					if (cleanMode) {
+						outputLines.push(prefix + deKtime(karaRawText));
+					} else {
+						const duration = aegiTimeTOds(parts[2]) - aegiTimeTOds(parts[1]);
+						const textLen = karaRawText.length;
+						if (textLen > 0) {
+							const timePerletter = Math.floor(duration / textLen);
+							const split = str_TOkara_array(karaRawText, options.mode);
+							outputLines.push(prefix + arrTOk_str(split, timePerletter));
+						} else {
+							outputLines.push(input);
+						}
 					}
+				} else {
+					outputLines.push(input);
 				}
-				outputLines.push(finalKaraStr);
 			} else {
 				outputLines.push(input);
 			}

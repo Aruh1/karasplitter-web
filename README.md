@@ -11,6 +11,7 @@ A modern, web-based tool for splitting `.ass` karaoke lines for Aegisub timing. 
   - **Syllables**: Splits by romaji syllables (e.g., "ka-ra-o-ke").
   - **Characters**: Splits by individual characters (e.g., "k-a-r-a-o-k-e").
   - **Words**: Splits by words (e.g., "karaoke").
+- **De-Ktime / Cleaner**: Easily strip existing `{\k}` tags to reset lines for re-timing.
 - **Smart Filtering**: Filter lines by Actor or Style to only process specific parts of your script.
 - **Instant Preview**: See the processed output immediately.
 - **Copy to Clipboard**: One-click copy for easy pasting back into Aegisub.

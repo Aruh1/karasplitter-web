@@ -19,6 +19,7 @@ export default function Home() {
 	const [selector, setSelector] = useState<"all" | "actor" | "style">("all");
 	const [selectorValue, setSelectorValue] = useState<string>("");
 	const [processedContent, setProcessedContent] = useState<string | null>(null);
+	const [cleanKTime, setCleanKTime] = useState<boolean>(false);
 	const [error, setError] = useState<string | null>(null);
 
 	// Extract actors and styles from pasted content
@@ -35,6 +36,7 @@ export default function Home() {
 			mode,
 			selector,
 			selectorValue,
+			cleanKTime,
 		});
 		setProcessedContent(result.content);
 		setError(result.error);
@@ -115,6 +117,8 @@ export default function Home() {
 							setSelectorValue={setSelectorValue}
 							actorOptions={metadata.actors}
 							styleOptions={metadata.styles}
+							cleanKTime={cleanKTime}
+							setCleanKTime={setCleanKTime}
 						/>
 
 						<button
