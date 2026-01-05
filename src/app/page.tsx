@@ -12,12 +12,133 @@ import { Button } from "@/components/ui/button";
 import {
 	extractActorsAndStyles,
 	processAssFile,
+	parseSourceSyllables,
+	createKanjiTimerState,
+	acceptMatch,
+	getOutputLine,
+	isComplete,
 	type SplitMode,
 } from "@/lib/ksplitter";
-import type { SelectorType, KTimeOption } from "@/lib/types";
+import type { SelectorType, KTimeOption, AppMode } from "@/lib/types";
+
+/**
+ * Process Kanji Timer: Transfer timing from source style lines to destination style lines.
+ * Uses 1:1 auto-matching when syllable count equals character count.
+ */
+function processKanjiTimer(
+	content: string,
+	sourceStyle: string,
+	destStyle: string,
+): { content: string; error: string | null } {
+	if (!sourceStyle || !destStyle) {
+		return {
+			content: "",
+			error: "Please select both source and destination styles.",
+		};
+	}
+	if (sourceStyle === destStyle) {
+		return {
+			content: "",
+			error: "Source and destination styles must be different.",
+		};
+	}
+
+	const lines = content.split(/\r?\n/);
+
+	// Collect source and destination lines by matching order
+	const sourceLines: { index: number; text: string }[] = [];
+	const destLines: { index: number; text: string }[] = [];
+
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i].trim();
+		if (!line.startsWith("Dialogue:")) continue;
+
+		const parts = line.split(",");
+		if (parts.length < 10) continue;
+
+		const style = parts[3]?.trim();
+		const dialogueText = parts.slice(9).join(",");
+
+		if (style === sourceStyle) {
+			sourceLines.push({ index: i, text: dialogueText });
+		} else if (style === destStyle) {
+			destLines.push({ index: i, text: dialogueText });
+		}
+	}
+
+	if (sourceLines.length === 0) {
+		return {
+			content: "",
+			error: `No lines found with source style "${sourceStyle}".`,
+		};
+	}
+	if (destLines.length === 0) {
+		return {
+			content: "",
+			error: `No lines found with destination style "${destStyle}".`,
+		};
+	}
+
+	// Process matching pairs
+	const processedLines = [...lines];
+	const pairCount = Math.min(sourceLines.length, destLines.length);
+	let successCount = 0;
+
+	for (let i = 0; i < pairCount; i++) {
+		const srcLine = sourceLines[i];
+		const dstLine = destLines[i];
+
+		// Parse source syllables and strip destination text
+		const sourceSyllables = parseSourceSyllables(srcLine.text);
+		if (sourceSyllables.length === 0) continue;
+
+		// Strip tags from destination to get plain text
+		const destText = dstLine.text.replace(/\{[^}]*\}/g, "");
+		if (!destText.trim()) continue;
+
+		// Create state and attempt auto-matching
+		let state = createKanjiTimerState(srcLine.text, destText);
+
+		// Try to auto-match: if source syllables == destination chars, do 1:1
+		// Otherwise, match all syllables to all destination chars
+		while (state.unmatchedSource.length > 0) {
+			const nextState = acceptMatch(state);
+			if (!nextState) break;
+			state = nextState;
+		}
+
+		// Generate output if complete
+		if (isComplete(state)) {
+			const output = getOutputLine(state);
+
+			// Reconstruct the dialogue line
+			const originalLine = processedLines[dstLine.index];
+			const parts = originalLine.split(",");
+			if (parts.length >= 10) {
+				const prefix = parts.slice(0, 9).join(",") + ",";
+				processedLines[dstLine.index] = prefix + output;
+				successCount++;
+			}
+		}
+	}
+
+	if (successCount === 0) {
+		return {
+			content: "",
+			error:
+				"Could not match any lines. Check your source/destination content.",
+		};
+	}
+
+	return {
+		content: processedLines.join("\n"),
+		error: null,
+	};
+}
 
 export default function Home() {
 	const [fileContent, setFileContent] = useState<string>("");
+	const [appMode, setAppMode] = useState<AppMode>("splitter");
 	const [mode, setMode] = useState<SplitMode>("syl");
 	const [selector, setSelector] = useState<SelectorType>("all");
 	const [selectorValue, setSelectorValue] = useState<string>("");
@@ -25,6 +146,10 @@ export default function Home() {
 	const [cleanKTime, setCleanKTime] = useState<boolean>(false);
 	const [kTimeOption, setKTimeOption] = useState<KTimeOption>("calculated");
 	const [error, setError] = useState<string | null>(null);
+
+	// Kanji Timer specific state
+	const [sourceStyle, setSourceStyle] = useState<string>("");
+	const [destStyle, setDestStyle] = useState<string>("");
 
 	const metadata = useMemo(() => {
 		if (!fileContent.trim()) {
@@ -35,15 +160,22 @@ export default function Home() {
 
 	const handleProcess = () => {
 		if (!fileContent) return;
-		const result = processAssFile(fileContent, {
-			mode,
-			selector,
-			selectorValue,
-			cleanKTime,
-			kTimeOption,
-		});
-		setProcessedContent(result.content);
-		setError(result.error);
+
+		if (appMode === "kanjitimer") {
+			const result = processKanjiTimer(fileContent, sourceStyle, destStyle);
+			setProcessedContent(result.content);
+			setError(result.error);
+		} else {
+			const result = processAssFile(fileContent, {
+				mode,
+				selector,
+				selectorValue,
+				cleanKTime,
+				kTimeOption,
+			});
+			setProcessedContent(result.content);
+			setError(result.error);
+		}
 	};
 
 	const handleContentChange = (val: string) => {
@@ -51,6 +183,16 @@ export default function Home() {
 		setProcessedContent(null);
 		setError(null);
 		setSelectorValue("");
+		setSourceStyle("");
+		setDestStyle("");
+	};
+
+	const isProcessDisabled = () => {
+		if (!fileContent.trim()) return true;
+		if (appMode === "kanjitimer") {
+			return !sourceStyle || !destStyle || sourceStyle === destStyle;
+		}
+		return false;
 	};
 
 	return (
@@ -111,7 +253,9 @@ export default function Home() {
 						Karasplitter Web
 					</h1>
 					<p className="text-lg text-[hsl(var(--muted-foreground))]">
-						Split your .ass karaoke lines with ease.
+						{appMode === "kanjitimer"
+							? "Transfer karaoke timing from Romaji to Kanji lines."
+							: "Split your .ass karaoke lines with ease."}
 					</p>
 				</div>
 
@@ -132,6 +276,8 @@ export default function Home() {
 
 					<div className="space-y-6">
 						<SplitOptions
+							appMode={appMode}
+							setAppMode={setAppMode}
 							mode={mode}
 							setMode={setMode}
 							selector={selector}
@@ -144,15 +290,19 @@ export default function Home() {
 							setCleanKTime={setCleanKTime}
 							kTimeOption={kTimeOption}
 							setKTimeOption={setKTimeOption}
+							sourceStyle={sourceStyle}
+							setSourceStyle={setSourceStyle}
+							destStyle={destStyle}
+							setDestStyle={setDestStyle}
 						/>
 
 						<Button
 							onClick={handleProcess}
-							disabled={!fileContent.trim()}
+							disabled={isProcessDisabled()}
 							className="w-full py-3 px-4 text-lg h-auto"
 							size="lg"
 						>
-							Process Content
+							{appMode === "kanjitimer" ? "Apply Timing" : "Process Content"}
 						</Button>
 					</div>
 				</div>

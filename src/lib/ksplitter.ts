@@ -333,3 +333,6 @@ export function processAssFile(
 
 	return { content: outputLines.join("\n"), error: null };
 }
+
+// Re-export Kanji Timer API
+export * from "./kanjitimer";
