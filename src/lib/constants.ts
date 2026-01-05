@@ -20,5 +20,5 @@ export const K_TIME_OPTION_LABELS: Record<KTimeOption, string> = {
 
 export const APP_MODE_LABELS: Record<AppMode, string> = {
 	splitter: "Splitter",
-	kanjitimer: "Kanji Timer",
+	kanjitimer: "Kanji Timer (beta)",
 };

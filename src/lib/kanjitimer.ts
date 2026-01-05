@@ -62,15 +62,6 @@ const K_TAG_REGEX = /\{\\([kK][fo]?)(\d+)\}([^{]*)/g;
  *
  * @param text - ASS dialogue text with karaoke tags (e.g., "{\\k50}ka{\\k50}ra")
  * @returns Array of parsed syllables with duration, text, and tag type
- *
- * @example
- * parseSourceSyllables("{\\k50}ka{\\k50}ra{\\k50}o{\\k50}ke")
- * // Returns: [
- * //   { duration: 500, text: "ka", tagType: "k" },
- * //   { duration: 500, text: "ra", tagType: "k" },
- * //   { duration: 500, text: "o", tagType: "k" },
- * //   { duration: 500, text: "ke", tagType: "k" }
- * // ]
  */
 export function parseSourceSyllables(text: string): SourceSyllable[] {
 	const syllables: SourceSyllable[] = [];
@@ -122,21 +113,11 @@ export function stripAssTags(text: string): string {
 }
 
 // ============================================================================
-// State Management
+// State Management (Manual Matching API)
 // ============================================================================
 
 /**
  * Create initial Kanji Timer state from source and destination lines.
- *
- * @param sourceText - Source ASS karaoke line with k-tags
- * @param destinationText - Destination text (plain or with tags to be stripped)
- * @returns Initial KanjiTimerState
- *
- * @example
- * const state = createKanjiTimerState(
- *   "{\\k50}ka{\\k50}ra{\\k50}o{\\k50}ke",
- *   "唐揚げ"
- * );
  */
 export function createKanjiTimerState(
 	sourceText: string,
@@ -190,7 +171,6 @@ export function getSelectedDestination(state: KanjiTimerState): string {
 
 /**
  * Increase source selection length by 1.
- * Returns new state (immutable).
  */
 export function increaseSourceMatch(state: KanjiTimerState): KanjiTimerState {
 	const newSelLength = Math.min(
@@ -205,7 +185,6 @@ export function increaseSourceMatch(state: KanjiTimerState): KanjiTimerState {
 
 /**
  * Decrease source selection length by 1 (minimum 0).
- * Returns new state (immutable).
  */
 export function decreaseSourceMatch(state: KanjiTimerState): KanjiTimerState {
 	const newSelLength = Math.max(state.sourceSelLength - 1, 0);
@@ -217,7 +196,6 @@ export function decreaseSourceMatch(state: KanjiTimerState): KanjiTimerState {
 
 /**
  * Increase destination selection length by 1.
- * Returns new state (immutable).
  */
 export function increaseDestinationMatch(
 	state: KanjiTimerState,
@@ -233,7 +211,6 @@ export function increaseDestinationMatch(
 
 /**
  * Decrease destination selection length by 1.
- * Returns new state (immutable).
  */
 export function decreaseDestinationMatch(
 	state: KanjiTimerState,
@@ -249,9 +226,6 @@ export function decreaseDestinationMatch(
 
 /**
  * Accept the current match, linking selected source syllables to destination text.
- * Returns new state with match recorded, or null if both selections are empty.
- *
- * This is equivalent to Aegisub's "Link" button operation.
  */
 export function acceptMatch(state: KanjiTimerState): KanjiTimerState | null {
 	// Completely empty match - reject
@@ -295,9 +269,6 @@ export function acceptMatch(state: KanjiTimerState): KanjiTimerState | null {
 
 /**
  * Undo the last match, restoring syllables and destination selection.
- * Returns new state, or null if there are no matches to undo.
- *
- * This is equivalent to Aegisub's "Unlink" button operation.
  */
 export function undoMatch(state: KanjiTimerState): KanjiTimerState | null {
 	if (state.matchedGroups.length === 0) {
@@ -327,17 +298,6 @@ export function undoMatch(state: KanjiTimerState): KanjiTimerState | null {
 
 /**
  * Generate the final ASS karaoke line from completed matches.
- *
- * For each match group, aggregates durations from all source syllables
- * and creates a single k-tag with the destination text.
- *
- * @param state - Current Kanji Timer state
- * @returns ASS karaoke line string
- *
- * @example
- * // If matches are: [{src: [50ms, 50ms], dst: "唐"}, {src: [100ms], dst: "揚げ"}]
- * getOutputLine(state)
- * // Returns: "{\\k10}唐{\\k10}揚げ"
  */
 export function getOutputLine(state: KanjiTimerState): string {
 	let result = "";
@@ -366,17 +326,21 @@ export function isSourceComplete(state: KanjiTimerState): boolean {
 }
 
 /**
- * Check if all destination characters have been matched.
+ * Check if the Kanji Timer matching is complete.
  */
-export function isDestinationComplete(state: KanjiTimerState): boolean {
-	return state.matchEnd >= state.destinationChars.length;
+export function isComplete(state: KanjiTimerState): boolean {
+	return (
+		isSourceComplete(state) &&
+		isDestinationComplete(state) &&
+		state.matchBegin >= state.destinationChars.length
+	);
 }
 
 /**
- * Check if the Kanji Timer matching is complete (both source and destination fully matched).
+ * Check if all destination characters have been matched.
  */
-export function isComplete(state: KanjiTimerState): boolean {
-	return isSourceComplete(state) && isDestinationComplete(state);
+export function isDestinationComplete(state: KanjiTimerState): boolean {
+	return state.matchBegin >= state.destinationChars.length;
 }
 
 // ============================================================================
@@ -385,10 +349,6 @@ export function isComplete(state: KanjiTimerState): boolean {
 
 /**
  * Auto-accept all remaining matches with 1:1 mapping.
- * Useful when source syllable count equals destination character count.
- *
- * @param state - Current state
- * @returns Final state with all matches completed, or null if counts don't match
  */
 export function autoMatchOneToOne(
 	state: KanjiTimerState,
@@ -420,10 +380,6 @@ export function autoMatchOneToOne(
 
 /**
  * Batch link: Accept all remaining source syllables to all remaining destination text.
- * Useful as a final "accept all remaining" operation.
- *
- * @param state - Current state
- * @returns New state with remaining matched as one group
  */
 export function acceptAllRemaining(
 	state: KanjiTimerState,
@@ -440,4 +396,214 @@ export function acceptAllRemaining(
 	};
 
 	return acceptMatch(allSourceState);
+}
+
+// ============================================================================
+// Auto Proportional / Dual Mode API (New)
+// ============================================================================
+
+/**
+ * Process a single Kanji Timer line using Dual Mode distribution.
+ *
+ * Algorithm:
+ * 1. Parse all k-tags from source text.
+ * 2. Segment destination text into Unicode graphemes (characters).
+ * 3. Calculate character allocation:
+ *    - Mode A (Tags >= Chars): 1:1 mapping. Each text tag gets 1 char until chars run out.
+ *    - Mode B (Tags < Chars): Proportional mapping. Chars distributed based on text length ratio.
+ * 4. Generate output string.
+ *
+ * @param sourceText - Source line text with k-tags
+ * @param destText - Destination line text (will be stripped of tags)
+ * @returns Processed line with k-tags applied to characters
+ */
+export function processKanjiTimerLine(
+	sourceText: string,
+	destText: string,
+): string {
+	// Parse source syllables using unified parser
+	// This ensures we capture tag types (k, kf, ko) and handle durations consistently
+	const syllables = parseSourceSyllables(sourceText);
+	if (syllables.length === 0) return sourceText;
+
+	// Strip tags from destination to get plain text, then segment into characters
+	const plainDestText = stripAssTags(destText);
+	const destChars = segmentGraphemes(plainDestText);
+	if (destChars.length === 0) return ""; // No dest chars
+
+	// Calculate distribution:
+	// - Empty k-tags (lead-in, whitespace only): don't consume any dest chars
+	// - Text k-tags: distribute dest chars among them
+	const textTags = syllables.filter((s) => s.text.trim().length > 0);
+	const totalTextLength = textTags.reduce(
+		(sum, s) => sum + s.text.trim().length,
+		0,
+	);
+
+	// Calculate how many dest chars each text-tag should get
+	const charAllocation: number[] = [];
+
+	if (textTags.length >= destChars.length) {
+		// Mode A: More tags than chars -> 1:1 mapping (last tags get 0)
+		for (let j = 0; j < textTags.length; j++) {
+			charAllocation.push(j < destChars.length ? 1 : 0);
+		}
+	} else {
+		// Mode B: More chars than tags -> Proportional distribution based on text length
+		let cumulativeTextLength = 0;
+		let allocatedChars = 0;
+
+		for (let j = 0; j < textTags.length; j++) {
+			const syl = textTags[j];
+			const sLen = syl.text.trim().length;
+			cumulativeTextLength += sLen;
+
+			// Proportional: (cumulativeTextLength / totalTextLength) * destChars.length
+			const targetCumulative = Math.round(
+				(cumulativeTextLength / totalTextLength) * destChars.length,
+			);
+			const charsForThisTag = Math.max(1, targetCumulative - allocatedChars);
+			charAllocation.push(charsForThisTag);
+			allocatedChars += charsForThisTag;
+		}
+
+		// Ensure we don't over-allocate
+		const totalAllocated = charAllocation.reduce((a, b) => a + b, 0);
+		if (totalAllocated > destChars.length && charAllocation.length > 0) {
+			const excess = totalAllocated - destChars.length;
+			charAllocation[charAllocation.length - 1] = Math.max(
+				1,
+				charAllocation[charAllocation.length - 1] - excess,
+			);
+		}
+	}
+
+	// Build output
+	let output = "";
+	let destIdx = 0;
+	let textTagIdx = 0;
+
+	for (const syl of syllables) {
+		// Convert duration back to centiseconds (ms -> cs)
+		const kVal = Math.round(syl.duration / 10);
+		// Preserve original tag type (k, kf, ko)
+		output += `{\\${syl.tagType}${kVal}}`;
+
+		// Only consume a destination character if this syllable has effective text
+		if (syl.text.trim().length > 0 && textTagIdx < charAllocation.length) {
+			const numChars = charAllocation[textTagIdx];
+			for (let c = 0; c < numChars && destIdx < destChars.length; c++) {
+				output += destChars[destIdx];
+				destIdx++;
+			}
+			textTagIdx++;
+		}
+	}
+
+	// Append any remaining destination characters (edge case)
+	while (destIdx < destChars.length) {
+		output += destChars[destIdx];
+		destIdx++;
+	}
+
+	return output;
+}
+
+/**
+ * Process an entire ASS file content to apply Kanji Timer logic based on styles.
+ *
+ * @param content - Full ASS file content
+ * @param sourceStyle - Style name for source lines (Romaji with timing)
+ * @param destStyle - Style name for destination lines (Kanji/Text to align)
+ * @returns Object containing processed content (if successful) or error message
+ */
+export function processKanjiTimer(
+	content: string,
+	sourceStyle: string,
+	destStyle: string,
+): { content: string; error: string | null } {
+	if (!sourceStyle || !destStyle) {
+		return {
+			content: "",
+			error: "Please select both source and destination styles.",
+		};
+	}
+	if (sourceStyle === destStyle) {
+		return {
+			content: "",
+			error: "Source and destination styles must be different.",
+		};
+	}
+
+	const lines = content.split(/\r?\n/);
+
+	// Collect source and destination lines by matching order
+	const sourceLines: { index: number; text: string }[] = [];
+	const destLines: { index: number; text: string }[] = [];
+
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i].trim();
+		if (!line.startsWith("Dialogue:")) continue;
+
+		const parts = line.split(",");
+		if (parts.length < 10) continue;
+
+		const style = parts[3]?.trim();
+		const dialogueText = parts.slice(9).join(",");
+
+		if (style === sourceStyle) {
+			sourceLines.push({ index: i, text: dialogueText });
+		} else if (style === destStyle) {
+			destLines.push({ index: i, text: dialogueText });
+		}
+	}
+
+	if (sourceLines.length === 0) {
+		return {
+			content: "",
+			error: `No lines found with source style "${sourceStyle}".`,
+		};
+	}
+	if (destLines.length === 0) {
+		return {
+			content: "",
+			error: `No lines found with destination style "${destStyle}".`,
+		};
+	}
+
+	// Process matching pairs
+	const processedLines = [...lines];
+	const pairCount = Math.min(sourceLines.length, destLines.length);
+	let successCount = 0;
+
+	for (let i = 0; i < pairCount; i++) {
+		const srcLine = sourceLines[i];
+		const dstLine = destLines[i];
+
+		// Process matching pairs using library logic
+		const output = processKanjiTimerLine(srcLine.text, dstLine.text);
+		if (!output) continue;
+
+		// Reconstruct the dialogue line
+		const originalLine = processedLines[dstLine.index];
+		const parts = originalLine.split(",");
+		if (parts.length >= 10) {
+			const prefix = parts.slice(0, 9).join(",") + ",";
+			processedLines[dstLine.index] = prefix + output;
+			successCount++;
+		}
+	}
+
+	if (successCount === 0) {
+		return {
+			content: "",
+			error:
+				"Could not match any lines. Check your source/destination content.",
+		};
+	}
+
+	return {
+		content: processedLines.join("\n"),
+		error: null,
+	};
 }
