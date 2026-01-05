@@ -14,10 +14,12 @@ import {
 	processAssFile,
 	type SplitMode,
 } from "@/lib/ksplitter";
-import type { SelectorType, KTimeOption } from "@/lib/types";
+import type { SelectorType, KTimeOption, AppMode } from "@/lib/types";
+import { processKanjiTimer } from "@/lib/kanjitimer";
 
 export default function Home() {
 	const [fileContent, setFileContent] = useState<string>("");
+	const [appMode, setAppMode] = useState<AppMode>("splitter");
 	const [mode, setMode] = useState<SplitMode>("syl");
 	const [selector, setSelector] = useState<SelectorType>("all");
 	const [selectorValue, setSelectorValue] = useState<string>("");
@@ -25,6 +27,10 @@ export default function Home() {
 	const [cleanKTime, setCleanKTime] = useState<boolean>(false);
 	const [kTimeOption, setKTimeOption] = useState<KTimeOption>("calculated");
 	const [error, setError] = useState<string | null>(null);
+
+	// Kanji Timer specific state
+	const [sourceStyle, setSourceStyle] = useState<string>("");
+	const [destStyle, setDestStyle] = useState<string>("");
 
 	const metadata = useMemo(() => {
 		if (!fileContent.trim()) {
@@ -35,15 +41,22 @@ export default function Home() {
 
 	const handleProcess = () => {
 		if (!fileContent) return;
-		const result = processAssFile(fileContent, {
-			mode,
-			selector,
-			selectorValue,
-			cleanKTime,
-			kTimeOption,
-		});
-		setProcessedContent(result.content);
-		setError(result.error);
+
+		if (appMode === "kanjitimer") {
+			const result = processKanjiTimer(fileContent, sourceStyle, destStyle);
+			setProcessedContent(result.content);
+			setError(result.error);
+		} else {
+			const result = processAssFile(fileContent, {
+				mode,
+				selector,
+				selectorValue,
+				cleanKTime,
+				kTimeOption,
+			});
+			setProcessedContent(result.content);
+			setError(result.error);
+		}
 	};
 
 	const handleContentChange = (val: string) => {
@@ -51,6 +64,16 @@ export default function Home() {
 		setProcessedContent(null);
 		setError(null);
 		setSelectorValue("");
+		setSourceStyle("");
+		setDestStyle("");
+	};
+
+	const isProcessDisabled = () => {
+		if (!fileContent.trim()) return true;
+		if (appMode === "kanjitimer") {
+			return !sourceStyle || !destStyle || sourceStyle === destStyle;
+		}
+		return false;
 	};
 
 	return (
@@ -111,7 +134,9 @@ export default function Home() {
 						Karasplitter Web
 					</h1>
 					<p className="text-lg text-[hsl(var(--muted-foreground))]">
-						Split your .ass karaoke lines with ease.
+						{appMode === "kanjitimer"
+							? "Transfer karaoke timing from Romaji to Kanji lines."
+							: "Split your .ass karaoke lines with ease."}
 					</p>
 				</div>
 
@@ -132,6 +157,8 @@ export default function Home() {
 
 					<div className="space-y-6">
 						<SplitOptions
+							appMode={appMode}
+							setAppMode={setAppMode}
 							mode={mode}
 							setMode={setMode}
 							selector={selector}
@@ -144,15 +171,19 @@ export default function Home() {
 							setCleanKTime={setCleanKTime}
 							kTimeOption={kTimeOption}
 							setKTimeOption={setKTimeOption}
+							sourceStyle={sourceStyle}
+							setSourceStyle={setSourceStyle}
+							destStyle={destStyle}
+							setDestStyle={setDestStyle}
 						/>
 
 						<Button
 							onClick={handleProcess}
-							disabled={!fileContent.trim()}
+							disabled={isProcessDisabled()}
 							className="w-full py-3 px-4 text-lg h-auto"
 							size="lg"
 						>
-							Process Content
+							{appMode === "kanjitimer" ? "Apply Timing" : "Process Content"}
 						</Button>
 					</div>
 				</div>
