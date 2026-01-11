@@ -28,10 +28,10 @@ const CONSONANTS_WITH_VOWEL = new Set(["r", "y", "m", "n", "h", "k"]);
 const W_VOWELS = new Set(["a", "o", "ā", "ō"]);
 const T_VOWELS = new Set(["a", "e", "o", "ā", "ē", "ō"]);
 const S_VOWELS = new Set(["a", "u", "e", "o", "ā", "ū", "ē", "ō"]);
-const KTIME_REGEX = /\{\\[kK][fo]?\d*\}/g;
+const ASS_TAG_REGEX = /\{[^}]*\}/g;
 
 export function deKtime(text: string): string {
-	return text.replace(KTIME_REGEX, "");
+	return text.replace(ASS_TAG_REGEX, "");
 }
 
 export interface ExtractedMetadata {

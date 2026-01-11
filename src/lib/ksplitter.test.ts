@@ -8,9 +8,53 @@ import {
 	arrTOk_str,
 	arrTOk_str_fixed,
 	extractActorsAndStyles,
+	deKtime,
 } from "./ksplitter";
 
 describe("ksplitter", () => {
+	describe("deKtime", () => {
+		it("should remove k-time tags", () => {
+			expect(deKtime("{\\k50}He{\\k50}llo")).toBe("Hello");
+			expect(deKtime("{\\K100}Test")).toBe("Test");
+			expect(deKtime("{\\kf30}Ka{\\ko20}ra")).toBe("Kara");
+		});
+
+		it("should remove all ASS tags inside curly braces", () => {
+			expect(deKtime("{\\1c&HFFFFFF&}Hello")).toBe("Hello");
+			expect(deKtime("{\\b1}Bold{\\b0} Text")).toBe("Bold Text");
+			expect(deKtime("{\\an8}Centered")).toBe("Centered");
+			expect(deKtime("{\\fs24}Big{\\fs12}Small")).toBe("BigSmall");
+		});
+
+		it("should remove color and style tags", () => {
+			expect(deKtime("{\\c&H00FF00&}Green")).toBe("Green");
+			expect(deKtime("{\\i1}Italic{\\i0}")).toBe("Italic");
+			expect(deKtime("{\\u1}Underline{\\u0}")).toBe("Underline");
+		});
+
+		it("should remove complex combined tags", () => {
+			expect(deKtime("{\\k50\\1c&HFFFFFF&\\b1}Styled{\\k30\\b0}Text")).toBe(
+				"StyledText",
+			);
+			expect(deKtime("{\\pos(100,200)}Positioned")).toBe("Positioned");
+			expect(deKtime("{\\move(0,0,100,100)}Moving")).toBe("Moving");
+		});
+
+		it("should handle empty braces", () => {
+			expect(deKtime("{}Hello")).toBe("Hello");
+			expect(deKtime("Hello{}World")).toBe("HelloWorld");
+		});
+
+		it("should handle text without any tags", () => {
+			expect(deKtime("Hello World")).toBe("Hello World");
+			expect(deKtime("")).toBe("");
+		});
+
+		it("should handle multiple consecutive tags", () => {
+			expect(deKtime("{\\k50}{\\1c&HFF0000&}{\\b1}Red Bold")).toBe("Red Bold");
+		});
+	});
+
 	describe("aegiTimeTOds", () => {
 		it("should convert 0:00:00.00 to 0", () => {
 			expect(aegiTimeTOds("0:00:00.00")).toBe(0);
