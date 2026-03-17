@@ -6,11 +6,14 @@ activation: always_on
 # Karasplitter Web — Project Overview
 
 ## What This Is
+
 A web-based karaoke timing tool for `.ass` (Advanced Substation Alpha) subtitle files. Two modes:
+
 - **Splitter**: Splits karaoke lines by syllable/word/character and inserts `{\k}` timing tags
 - **Kanji Timer**: Transfers romaji timing to kanji lines
 
 ## Tech Stack
+
 - **Runtime**: Bun
 - **Framework**: Next.js 16 (App Router) + React 19
 - **Styling**: TailwindCSS 4 + shadcn/ui (Radix primitives)
@@ -19,6 +22,7 @@ A web-based karaoke timing tool for `.ass` (Advanced Substation Alpha) subtitle 
 - **Linting**: ESLint (via eslint-config-next)
 
 ## Project Structure
+
 ```
 src/
 ├── app/           # Next.js App Router pages (page.tsx, layout.tsx, how-to-use/)
@@ -35,6 +39,7 @@ src/
 ```
 
 ## Key Conventions
+
 - **Bun is the default runtime** — always use `bun` instead of `npm`, `yarn`, or `node`
   - `bun install`, `bun run dev`, `bun run build`, `bun run test`, `bun run format`
   - Use `bunx` instead of `npx` for one-off package execution

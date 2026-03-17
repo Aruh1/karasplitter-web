@@ -6,9 +6,10 @@
 		"dev": "bun run format && vitest run && next dev",
 		"build": "bun run format && vitest run && next build",
 		"start": "next start",
-		"lint": "eslint src",
-		"lint:fix": "eslint src --fix",
-		"format": "biome format --write .",
+		"lint": "oxlint",
+		"lint:fix": "oxlint --fix",
+		"format": "oxfmt",
+		"format:check": "oxfmt --check",
 		"test": "vitest run"
 	},
 	"dependencies": {
@@ -23,19 +24,18 @@
 		"next": "16.1.6",
 		"react": "19.2.4",
 		"react-dom": "19.2.4",
-		"tailwind-merge": "^3.4.1"
+		"tailwind-merge": "^3.5.0"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.3.13",
-		"eslint": "^9.39.2",
-		"eslint-config-next": "^16.1.6",
-		"@tailwindcss/postcss": "^4.1.18",
-		"@types/node": "^25.2.3",
+		"@tailwindcss/postcss": "^4.2.1",
+		"@types/bun": "^1.3.10",
+		"@types/node": "^25.5.0",
 		"@types/react": "^19.2.14",
 		"@types/react-dom": "^19.2.3",
-		"@types/bun": "^1.3.9",
-		"tailwindcss": "^4.1.18",
+		"oxfmt": "^0.41.0",
+		"oxlint": "^1.56.0",
+		"tailwindcss": "^4.2.1",
 		"typescript": "^5.9.3",
-		"vitest": "^4.0.18"
+		"vitest": "^4.1.0"
 	}
 }

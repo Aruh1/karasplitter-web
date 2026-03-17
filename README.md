@@ -34,17 +34,20 @@ A modern, web-based tool for splitting `.ass` karaoke lines for Aegisub timing. 
 ### Installation
 
 1. Clone the repository:
+
    ```bash
    git clone https://github.com/Aruh1/karasplitter-web.git
    cd karasplitter-web
    ```
 
 2. Install dependencies:
+
    ```bash
    bun install
    ```
 
 3. Run the development server:
+
    ```bash
    bun run dev
    ```
