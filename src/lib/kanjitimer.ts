@@ -569,9 +569,7 @@ export function autoMatchKaraoke(
 		const translit: string[] = [];
 		const lookaheadChar = destChars[lookaheadDst];
 		const nextChar =
-			lookaheadDst + 1 < destChars.length
-				? destChars[lookaheadDst + 1]
-				: "";
+			lookaheadDst + 1 < destChars.length ? destChars[lookaheadDst + 1] : "";
 
 		if (nextChar) {
 			translit.push(...getKanaRomajiReadings(lookaheadChar + nextChar));
