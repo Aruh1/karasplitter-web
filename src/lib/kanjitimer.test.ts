@@ -18,6 +18,7 @@ import {
 	isComplete,
 	autoMatchOneToOne,
 	acceptAllRemaining,
+	autoMatchKaraoke,
 	processKanjiTimerLine,
 } from "./kanjitimer";
 
@@ -454,56 +455,152 @@ describe("kanjitimer", () => {
 		});
 	});
 
-	describe("processKanjiTimerLine (Auto Dual Mode)", () => {
-		it("Mode A: should use 1:1 mapping when tags >= chars", () => {
-			// 3 tags, 2 chars. First 2 match 1:1, last one gets nothing (empty)
-			const src = "{\\k10}a{\\k20}b{\\k30}c";
-			const dst = "XY";
-			const output = processKanjiTimerLine(src, dst);
-			// Expected: {\k10}X{\k20}Y{\k30}
-			expect(output).toBe("{\\k10}X{\\k20}Y{\\k30}");
+	describe("autoMatchKaraoke", () => {
+		it("should match romaji syllable to corresponding hiragana", () => {
+			// "ka" → "か"
+			const result = autoMatchKaraoke(["ka"], "か");
+			expect(result.sourceLength).toBe(1);
+			expect(result.destinationLength).toBe(1);
 		});
 
-		it("Mode B: should use proportional mapping when tags < chars", () => {
-			// Proportional: 2 tags (length 3 and 1), 4 chars
-			// Tag 1 (len 3) gets 3/4 chars -> 3 chars
-			// Tag 2 (len 1) gets 1/4 chars -> 1 char
-			const src = "{\\k10}abc{\\k20}d";
-			const dst = "WXYZ";
+		it("should match romaji syllable to corresponding katakana", () => {
+			// "ka" → "カ"
+			const result = autoMatchKaraoke(["ka"], "カ");
+			expect(result.sourceLength).toBe(1);
+			expect(result.destinationLength).toBe(1);
+		});
+
+		it("should match digraph romaji spanning two kana grapheme clusters", () => {
+			// "sha" → "シャ" (two separate grapheme clusters: シ + ャ)
+			const result = autoMatchKaraoke(["sha"], "シャ");
+			expect(result.sourceLength).toBe(1);
+			expect(result.destinationLength).toBe(2);
+		});
+
+		it("should match a source syllable that covers multiple kana", () => {
+			// "sou" covers "so"→"そ" then "u"→"う" before src is exhausted
+			const result = autoMatchKaraoke(["sou", "a"], "そうあ");
+			expect(result.sourceLength).toBe(1);
+			expect(result.destinationLength).toBe(2); // "そ" + "う"
+		});
+
+		it("should handle empty source syllable (lead-in)", () => {
+			// Empty syllable text → 0 dest chars consumed, 1 source syllable consumed
+			const result = autoMatchKaraoke(["", "ka"], "カ");
+			expect(result.sourceLength).toBe(1);
+			expect(result.destinationLength).toBe(0);
+		});
+
+		it("should fall back to 1-char match for non-kana content", () => {
+			const result = autoMatchKaraoke(["a", "b"], "XY");
+			expect(result.sourceLength).toBe(1);
+			expect(result.destinationLength).toBe(1);
+		});
+
+		it("should return empty result for empty source", () => {
+			const result = autoMatchKaraoke([], "カラ");
+			expect(result.sourceLength).toBe(0);
+			expect(result.destinationLength).toBe(0);
+		});
+
+		it("should assign all source to last dest char when only one char remains", () => {
+			// Only 1 dest char → all source syllables bind to it
+			const result = autoMatchKaraoke(["no", "ko"], "の");
+			expect(result.sourceLength).toBe(2);
+			expect(result.destinationLength).toBe(1);
+		});
+
+		it("should use lookahead to split dest chars between source syllables", () => {
+			// source: ["so", "ra"] — "ra" matches "ラ" via lookahead
+			// dest: "ソラ" — "so" should get "ソ", "ra" should get "ラ"
+			const result = autoMatchKaraoke(["so", "ra"], "ソラ");
+			expect(result.sourceLength).toBe(1);
+			expect(result.destinationLength).toBe(1); // "ソ" for "so"
+		});
+	});
+
+	describe("processKanjiTimerLine (Aegisub auto-match)", () => {
+		it("should perform 1:1 romaji-to-katakana matching", () => {
+			const src = "{\\k30}ka{\\k30}ra{\\k40}o{\\k30}ke";
+			const dst = "カラオケ";
 			const output = processKanjiTimerLine(src, dst);
-			// Expected: {\k10}WXY{\k20}Z
-			expect(output).toBe("{\\k10}WXY{\\k20}Z");
+			expect(output).toBe("{\\k30}カ{\\k30}ラ{\\k40}オ{\\k30}ケ");
+		});
+
+		it("should perform 1:1 romaji-to-hiragana matching", () => {
+			const src = "{\\k20}na{\\k30}ni";
+			const dst = "なに";
+			const output = processKanjiTimerLine(src, dst);
+			expect(output).toBe("{\\k20}な{\\k30}に");
+		});
+
+		it("should match digraph romaji to paired kana graphemes", () => {
+			// "sha" → "シャ" (シ + ャ = 2 grapheme clusters)
+			const src = "{\\k40}sha";
+			const dst = "シャ";
+			const output = processKanjiTimerLine(src, dst);
+			expect(output).toBe("{\\k40}シャ");
+		});
+
+		it("should match a source syllable spanning multiple kana", () => {
+			// "sou" covers "so"→"そ" then "u"→"う"
+			const src = "{\\k49}sou{\\k17}a";
+			const dst = "そうあ";
+			const output = processKanjiTimerLine(src, dst);
+			expect(output).toBe("{\\k49}そう{\\k17}あ");
 		});
 
 		it("should handle empty lead-in tags correctly", () => {
-			// Lead-in {\k5} empty -> no char
-			// {\k10}a -> X
-			// {\k10}b -> Y
-			const src = "{\\k5}{\\k10}a{\\k10}b";
-			const dst = "XY";
+			// Lead-in {\\k5} gets 0 dest chars; then 1:1 kana matching
+			const src = "{\\k5}{\\k10}ka{\\k10}ra";
+			const dst = "カラ";
 			const output = processKanjiTimerLine(src, dst);
-			expect(output).toBe("{\\k5}{\\k10}X{\\k10}Y");
+			expect(output).toBe("{\\k5}{\\k10}カ{\\k10}ラ");
 		});
 
-		it("should handle complex scenario from user example (Mode B)", () => {
-			// "sou" (3 chars) gets 2 dest chars
-			const src = "{\\k4}{\\k49}sou {\\k17}a{\\k19}no"; // text lens: 0, 3, 1, 2 = 6 total
-			const dst = "そうあの日"; // 5 chars
-			// {\k4} -> 0 chars
-			// {\k49} (3/6 = 0.5) * 5 = 2.5 -> 3 chars? Or round(2.5) -> 3.
-			// Let's check calculation:
-			// "sou" 3 cumulative. (3/6)*5 = 2.5 -> round 3. Allocated 3. (Oops, user example was slightly different ratio or total length)
+		it("more tags than dest chars: remaining source syllables accumulate into last match", () => {
+			// ka → カ (10cs), ra+o → ラ (20+30=50cs) because dest exhausted after "ラ"
+			const src = "{\\k10}ka{\\k20}ra{\\k30}o";
+			const dst = "カラ";
+			const output = processKanjiTimerLine(src, dst);
+			expect(output).toBe("{\\k10}カ{\\k50}ラ");
+		});
 
-			// Using verified example from earlier test
-			// k49 (len 3), k17 (len 1). Total len 4. Dest chars 3 ("そうあ")
-			// k49: (3/4)*3 = 2.25 -> 2. Allocated 2.
-			// k17: (4/4)*3 = 3 -> 3. Allocated 3-2 = 1.
-			// Result: k49 gets 2, k17 gets 1.
+		it("should fall back to 1:1 for non-kana ASCII content", () => {
+			// ASCII source and ASCII dest — no kana table match, falls back to 1:1
+			const src = "{\\k10}a{\\k20}b";
+			const dst = "XY";
+			const output = processKanjiTimerLine(src, dst);
+			expect(output).toBe("{\\k10}X{\\k20}Y");
+		});
 
-			const customSrc = "{\\k49}sou{\\k17}a";
-			const customDst = "そうあ";
-			const output = processKanjiTimerLine(customSrc, customDst);
-			expect(output).toBe("{\\k49}そう{\\k17}あ");
+		it("more dest chars than source syllables: trailing chars appended without tag", () => {
+			// 2 syllables, 4 dest chars — first 2 match 1:1, remaining 2 appended raw
+			const src = "{\\k10}a{\\k20}b";
+			const dst = "WXYZ";
+			const output = processKanjiTimerLine(src, dst);
+			expect(output).toBe("{\\k10}W{\\k20}XYZ");
+		});
+
+		it("should aggregate durations for multi-syllable kanji match", () => {
+			// ka+ra → 唐 (40cs), a → 揚 (20cs), ge → げ (20cs)
+			const src = "{\\k20}ka{\\k20}ra{\\k20}a{\\k20}ge";
+			const dst = "唐揚げ";
+			const output = processKanjiTimerLine(src, dst);
+			expect(output).toBe("{\\k40}唐{\\k20}揚{\\k20}げ");
+		});
+
+		it("should preserve kf and ko tag types in output", () => {
+			const src = "{\\kf30}ka{\\ko30}ra";
+			const dst = "カラ";
+			const output = processKanjiTimerLine(src, dst);
+			expect(output).toBe("{\\kf30}カ{\\ko30}ラ");
+		});
+
+		it("should return empty string when dest is empty", () => {
+			const src = "{\\k10}ka";
+			const output = processKanjiTimerLine(src, "");
+			expect(output).toBe("");
 		});
 	});
 });

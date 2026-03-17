@@ -4,8 +4,12 @@
  * Functional API for linking source karaoke syllables to destination text,
  * aggregating durations, and reconstructing ASS karaoke lines.
  *
- * Based on: https://github.com/arch1t3cht/Aegisub/blob/feature/src/dialog_kara_timing_copy.cpp
+ * Based on:
+ *  - https://github.com/arch1t3cht/Aegisub/blob/feature/src/dialog_kara_timing_copy.cpp
+ *  - https://github.com/arch1t3cht/Aegisub/blob/feature/libaegisub/common/karaoke_matcher.cpp
  */
+
+import { KANA_TABLE } from "./kana-table";
 
 // ============================================================================
 // Types
@@ -399,111 +403,289 @@ export function acceptAllRemaining(
 }
 
 // ============================================================================
-// Auto Proportional / Dual Mode API (New)
+// Kana/Romaji Auto-Match Helpers (Internal)
 // ============================================================================
 
 /**
- * Process a single Kanji Timer line using Dual Mode distribution.
+ * Result of the auto-match algorithm for one step.
+ * Mirrors Aegisub's `karaoke_match_result`.
+ */
+interface KaraokeMatchResult {
+	/** Number of source syllables to consume in this match */
+	sourceLength: number;
+	/** Number of destination grapheme clusters to consume in this match */
+	destinationLength: number;
+}
+
+/**
+ * Try to match the start of `src` (romaji) to consecutive entries in `destChars`
+ * starting at `dstIdx` using the kana-romaji lookup table.
  *
- * Algorithm:
- * 1. Parse all k-tags from source text.
- * 2. Segment destination text into Unicode graphemes (characters).
- * 3. Calculate character allocation:
- *    - Mode A (Tags >= Chars): 1:1 mapping. Each text tag gets 1 char until chars run out.
- *    - Mode B (Tags < Chars): Proportional mapping. Chars distributed based on text length ratio.
- * 4. Generate output string.
+ * Returns `{romajiLength, kanaLength}` if a match is found, otherwise `null`.
+ * Digraph entries (e.g. "きゃ") are listed first in KANA_TABLE and therefore
+ * tried before their constituent singles, producing the longest match.
+ */
+function tryKanaMatch(
+	src: string,
+	destChars: string[],
+	dstIdx: number,
+): { romajiLength: number; kanaLength: number } | null {
+	const lsrc = src.toLowerCase();
+	for (const pair of KANA_TABLE) {
+		if (!lsrc.startsWith(pair.romaji)) continue;
+		// Check that each codepoint of the kana matches consecutive dest chars
+		const kanaChars = [...pair.kana]; // split on codepoints (all kana are BMP)
+		let matches = true;
+		for (let i = 0; i < kanaChars.length; i++) {
+			if (
+				dstIdx + i >= destChars.length ||
+				destChars[dstIdx + i] !== kanaChars[i]
+			) {
+				matches = false;
+				break;
+			}
+		}
+		if (matches) {
+			return {
+				romajiLength: pair.romaji.length,
+				kanaLength: kanaChars.length,
+			};
+		}
+	}
+	return null;
+}
+
+/**
+ * Return all romaji readings for `kana` (a string of 1–2 kana codepoints).
+ * Used by the lookahead section of `autoMatchKaraoke`.
+ */
+function getKanaRomajiReadings(kana: string): string[] {
+	const results: string[] = [];
+	for (const pair of KANA_TABLE) {
+		if (pair.kana === kana) {
+			results.push(pair.romaji);
+		}
+	}
+	return results;
+}
+
+/**
+ * Aegisub-compatible auto-match algorithm.
  *
- * @param sourceText - Source line text with k-tags
- * @param destText - Destination line text (will be stripped of tags)
- * @returns Processed line with k-tags applied to characters
+ * Ported from `agi::auto_match_karaoke` in karaoke_matcher.cpp.
+ *
+ * Given the remaining unmatched source syllable texts and the remaining
+ * destination string, returns how many source syllables and destination
+ * grapheme clusters should be consumed for the **current** match group.
+ *
+ * @param sourceStrings - Texts of remaining unmatched source syllables
+ * @param destString    - Remaining destination string (from current position)
+ * @returns Match result with sourceLength ≥ 1 and destinationLength ≥ 0
+ */
+export function autoMatchKaraoke(
+	sourceStrings: string[],
+	destString: string,
+): KaraokeMatchResult {
+	const result: KaraokeMatchResult = { sourceLength: 0, destinationLength: 0 };
+	if (sourceStrings.length === 0) return result;
+
+	result.sourceLength = 1;
+	const destChars = segmentGraphemes(destString);
+	if (destChars.length === 0) return result;
+
+	// Working copy of the first source syllable (lowercased for matching)
+	let src = sourceStrings[0].toLowerCase();
+	let dstIdx = 0;
+
+	/**
+	 * Strip leading whitespace from src and advance dstIdx past any whitespace
+	 * characters in dest.  Returns true when we should stop iterating (either
+	 * src was exhausted or dest ran out).
+	 */
+	const eatWhitespace = (): boolean => {
+		src = src.trimStart();
+		while (dstIdx < destChars.length && /^\s$/.test(destChars[dstIdx])) {
+			dstIdx++;
+			result.destinationLength++;
+		}
+		if (dstIdx >= destChars.length) {
+			// Ran out of dest — bind all remaining source to this match
+			result.sourceLength = sourceStrings.length;
+			return true;
+		}
+		return src.length === 0;
+	};
+
+	if (eatWhitespace()) return result;
+
+	// ── Main matching loop ────────────────────────────────────────────────────
+	// Advance through romaji ↔ kana correspondences one syllable at a time.
+	while (src.length > 0) {
+		if (dstIdx >= destChars.length) break;
+		const dstChar = destChars[dstIdx];
+
+		// 1. Direct character match (case-insensitive; handles ASCII ↔ ASCII)
+		if (src.toLowerCase().startsWith(dstChar.toLowerCase())) {
+			src = src.slice(dstChar.length);
+			dstIdx++;
+			result.destinationLength++;
+			if (eatWhitespace()) return result;
+			continue;
+		}
+
+		// 2. Romaji → kana lookup (handles "ka" ↔ "カ", "sha" ↔ "シャ", etc.)
+		const kanaMatch = tryKanaMatch(src, destChars, dstIdx);
+		if (kanaMatch !== null) {
+			src = src.slice(kanaMatch.romajiLength);
+			dstIdx += kanaMatch.kanaLength;
+			result.destinationLength += kanaMatch.kanaLength;
+			if (eatWhitespace()) return result;
+			continue;
+		}
+
+		break; // No match found; fall through to lookahead
+	}
+
+	// ── Special case: only one dest char remains ──────────────────────────────
+	// Bind all remaining source syllables to that last character.
+	if (destChars.length - dstIdx === 1) {
+		result.sourceLength = sourceStrings.length;
+		result.destinationLength++;
+		return result;
+	}
+
+	// ── Lookahead ─────────────────────────────────────────────────────────────
+	// Scan ahead in dest to find where the NEXT source syllable matches, then
+	// assign current dest characters proportionally — mirroring Aegisub's logic.
+	const DST_LOOKAHEAD_MAX = 3;
+	const MAX_CHARACTER_LENGTH = 5;
+
+	let lookaheadDst = dstIdx;
+	for (let lookahead = 0; lookahead < DST_LOOKAHEAD_MAX; lookahead++) {
+		lookaheadDst++;
+		if (lookaheadDst >= destChars.length) break;
+
+		// Transliterate the lookahead dest char to romaji
+		const translit: string[] = [];
+		const lookaheadChar = destChars[lookaheadDst];
+		const nextChar =
+			lookaheadDst + 1 < destChars.length ? destChars[lookaheadDst + 1] : "";
+
+		if (nextChar) {
+			translit.push(...getKanaRomajiReadings(lookaheadChar + nextChar));
+		}
+		translit.push(...getKanaRomajiReadings(lookaheadChar));
+
+		// Search source syllables (beyond the first) for a syllable that matches
+		// the lookahead destination character.
+		const srcLookaheadMax = (lookahead + 1) * MAX_CHARACTER_LENGTH;
+		let srcPos = 0;
+
+		for (let si = 0; si < sourceStrings.length; si++) {
+			const syl = sourceStrings[si];
+			if (/^\s*$/.test(syl)) continue; // skip whitespace-only syllables
+			srcPos++;
+			if (srcPos === 1) continue; // skip the current syllable (already processed)
+			if (srcPos > srcLookaheadMax) break;
+
+			const lsyl = syl.toLowerCase();
+			const matches =
+				syl === lookaheadChar || translit.some((t) => lsyl.startsWith(t));
+			if (!matches) continue;
+
+			if (srcPos === 2) {
+				// The very next syllable matches → current syllable gets lookahead+1 dest chars
+				result.destinationLength += lookahead + 1;
+				return result;
+			}
+
+			// Several syllables ahead → proportional split
+			result.destinationLength += 1;
+			result.sourceLength = Math.round(
+				(srcPos - 1.0) / (lookahead + 1.0) + 0.5,
+			);
+			return result;
+		}
+	}
+
+	// Fallback: always consume at least one destination character
+	result.destinationLength = Math.max(result.destinationLength, 1);
+	return result;
+}
+
+// ============================================================================
+// Auto-Match Batch API
+// ============================================================================
+
+/**
+ * Process a single Kanji Timer line using the Aegisub auto-match algorithm.
+ *
+ * Replaces the previous proportional "Dual Mode" implementation with Aegisub's
+ * intelligent romaji↔kana matching (`auto_match_karaoke`).
+ *
+ * Algorithm (per match step):
+ * 1. Call `autoMatchKaraoke` with remaining source syllable texts and dest string.
+ * 2. Sum durations of the matched source syllables.
+ * 3. Emit `{\kXX}destText` and advance both cursors.
+ * 4. Repeat until source syllables or dest chars are exhausted.
+ *
+ * @param sourceText - Source line text with k-tags (romaji timing)
+ * @param destText   - Destination line text (kana/kanji, tags are stripped)
+ * @returns Processed line with k-tags applied to destination characters
  */
 export function processKanjiTimerLine(
 	sourceText: string,
 	destText: string,
 ): string {
-	// Parse source syllables using unified parser
-	// This ensures we capture tag types (k, kf, ko) and handle durations consistently
 	const syllables = parseSourceSyllables(sourceText);
 	if (syllables.length === 0) return sourceText;
 
-	// Strip tags from destination to get plain text, then segment into characters
 	const plainDestText = stripAssTags(destText);
 	const destChars = segmentGraphemes(plainDestText);
-	if (destChars.length === 0) return ""; // No dest chars
+	if (destChars.length === 0) return "";
 
-	// Calculate distribution:
-	// - Empty k-tags (lead-in, whitespace only): don't consume any dest chars
-	// - Text k-tags: distribute dest chars among them
-	const textTags = syllables.filter((s) => s.text.trim().length > 0);
-	const totalTextLength = textTags.reduce(
-		(sum, s) => sum + s.text.trim().length,
-		0,
-	);
-
-	// Calculate how many dest chars each text-tag should get
-	const charAllocation: number[] = [];
-
-	if (textTags.length >= destChars.length) {
-		// Mode A: More tags than chars -> 1:1 mapping (last tags get 0)
-		for (let j = 0; j < textTags.length; j++) {
-			charAllocation.push(j < destChars.length ? 1 : 0);
-		}
-	} else {
-		// Mode B: More chars than tags -> Proportional distribution based on text length
-		let cumulativeTextLength = 0;
-		let allocatedChars = 0;
-
-		for (let j = 0; j < textTags.length; j++) {
-			const syl = textTags[j];
-			const sLen = syl.text.trim().length;
-			cumulativeTextLength += sLen;
-
-			// Proportional: (cumulativeTextLength / totalTextLength) * destChars.length
-			const targetCumulative = Math.round(
-				(cumulativeTextLength / totalTextLength) * destChars.length,
-			);
-			const charsForThisTag = Math.max(1, targetCumulative - allocatedChars);
-			charAllocation.push(charsForThisTag);
-			allocatedChars += charsForThisTag;
-		}
-
-		// Ensure we don't over-allocate
-		const totalAllocated = charAllocation.reduce((a, b) => a + b, 0);
-		if (totalAllocated > destChars.length && charAllocation.length > 0) {
-			const excess = totalAllocated - destChars.length;
-			charAllocation[charAllocation.length - 1] = Math.max(
-				1,
-				charAllocation[charAllocation.length - 1] - excess,
-			);
-		}
-	}
-
-	// Build output
 	let output = "";
-	let destIdx = 0;
-	let textTagIdx = 0;
+	let syllableIdx = 0;
+	let destStart = 0;
 
-	for (const syl of syllables) {
-		// Convert duration back to centiseconds (ms -> cs)
-		const kVal = Math.round(syl.duration / 10);
-		// Preserve original tag type (k, kf, ko)
-		output += `{\\${syl.tagType}${kVal}}`;
+	while (syllableIdx < syllables.length && destStart < destChars.length) {
+		const remainingSyllables = syllables.slice(syllableIdx);
+		const remainingDestStr = destChars.slice(destStart).join("");
+		const sourceTexts = remainingSyllables.map((s) => s.text);
 
-		// Only consume a destination character if this syllable has effective text
-		if (syl.text.trim().length > 0 && textTagIdx < charAllocation.length) {
-			const numChars = charAllocation[textTagIdx];
-			for (let c = 0; c < numChars && destIdx < destChars.length; c++) {
-				output += destChars[destIdx];
-				destIdx++;
-			}
-			textTagIdx++;
+		const match = autoMatchKaraoke(sourceTexts, remainingDestStr);
+
+		const srcCount = Math.max(1, match.sourceLength);
+		const dstCount = match.destinationLength; // may be 0 for empty syllables
+
+		// Sum durations of matched source syllables
+		let duration = 0;
+		for (let i = 0; i < srcCount && syllableIdx + i < syllables.length; i++) {
+			duration += syllables[syllableIdx + i].duration;
 		}
+
+		const kVal = Math.round(duration / 10);
+		// Use tag type from the first matched syllable
+		const tagType = syllables[syllableIdx].tagType;
+		const dstText = destChars.slice(destStart, destStart + dstCount).join("");
+
+		output += `{\\${tagType}${kVal}}${dstText}`;
+
+		syllableIdx += srcCount;
+		destStart += dstCount;
 	}
 
-	// Append any remaining destination characters (edge case)
-	while (destIdx < destChars.length) {
-		output += destChars[destIdx];
-		destIdx++;
+	// Emit any remaining source syllables that have no dest chars left
+	while (syllableIdx < syllables.length) {
+		const syl = syllables[syllableIdx];
+		const kVal = Math.round(syl.duration / 10);
+		output += `{\\${syl.tagType}${kVal}}`;
+		syllableIdx++;
+	}
+
+	// Append any remaining dest chars without a source syllable
+	if (destStart < destChars.length) {
+		output += destChars.slice(destStart).join("");
 	}
 
 	return output;
