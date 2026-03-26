@@ -24,10 +24,23 @@ const VOWELS_WITH_MACRON = new Set([
 	"ē",
 	"ō",
 ]);
-const CONSONANTS_WITH_VOWEL = new Set(["r", "y", "m", "n", "h", "k"]);
-const W_VOWELS = new Set(["a", "o", "ā", "ō"]);
-const T_VOWELS = new Set(["a", "e", "o", "ā", "ē", "ō"]);
-const S_VOWELS = new Set(["a", "u", "e", "o", "ā", "ū", "ē", "ō"]);
+const CONSONANTS_WITH_VOWEL = new Set([
+	"b",
+	"d",
+	"g",
+	"h",
+	"k",
+	"m",
+	"n",
+	"p",
+	"r",
+	"v",
+	"y",
+	"z",
+]);
+const W_VOWELS = new Set(["a", "e", "i", "o", "ā", "ē", "ī", "ō"]);
+const T_VOWELS = new Set(["a", "e", "i", "o", "u", "ā", "ē", "ī", "ō", "ū"]);
+const S_VOWELS = new Set(["a", "e", "i", "o", "u", "ā", "ē", "ī", "ō", "ū"]);
 const ASS_TAG_REGEX = /\{[^}]*\}/g;
 
 export function deKtime(text: string): string {
@@ -145,6 +158,14 @@ export function k_array_syl(karaText: string): string[] {
 			if (VOWELS_WITH_MACRON.has(lnc)) {
 				result.push(char + nextChar);
 				l += 2;
+			} else if (
+				(lnc === "w" || lnc === "y") &&
+				l + 2 < ln &&
+				VOWELS_WITH_MACRON.has(karaText[l + 2]?.toLowerCase() ?? "")
+			) {
+				// kwa, gwa, bya, dyu, vya, etc.
+				result.push(char + nextChar + karaText[l + 2]);
+				l += 3;
 			} else {
 				result.push(char);
 				l++;
@@ -188,9 +209,13 @@ export function k_array_syl(karaText: string): string[] {
 				l++;
 			}
 		} else if (lc === "f") {
-			if (lnc === "u") {
+			if (VOWELS_WITH_MACRON.has(lnc)) {
 				result.push(char + nextChar);
 				l += 2;
+			} else if (lnc === "y" && l + 2 < ln) {
+				// fyu (フュ)
+				result.push(char + nextChar + karaText[l + 2]);
+				l += 3;
 			} else {
 				result.push(char);
 				l++;
