@@ -120,10 +120,19 @@ export const KANA_TABLE: KanaPair[] = [
 	{ kana: "ツィ", romaji: "tsi" },
 	{ kana: "ツェ", romaji: "tse" },
 	{ kana: "ツォ", romaji: "tso" },
+	{ kana: "トゥ", romaji: "tu" },
+	{ kana: "ドゥ", romaji: "du" },
 	{ kana: "ウィ", romaji: "wi" },
 	{ kana: "ウェ", romaji: "we" },
 	{ kana: "ウォ", romaji: "wo" },
 	{ kana: "イェ", romaji: "ye" },
+	{ kana: "スィ", romaji: "si" },
+	{ kana: "ズィ", romaji: "zi" },
+	{ kana: "クァ", romaji: "kwa" },
+	{ kana: "クィ", romaji: "kwi" },
+	{ kana: "クェ", romaji: "kwe" },
+	{ kana: "クォ", romaji: "kwo" },
+	{ kana: "グァ", romaji: "gwa" },
 	{ kana: "ヴァ", romaji: "va" },
 	{ kana: "ヴィ", romaji: "vi" },
 	{ kana: "ヴェ", romaji: "ve" },
@@ -131,6 +140,14 @@ export const KANA_TABLE: KanaPair[] = [
 	{ kana: "ヴャ", romaji: "vya" },
 	{ kana: "ヴュ", romaji: "vyu" },
 	{ kana: "ヴョ", romaji: "vyo" },
+
+	// Extended digraphs for foreign sounds (e-column + small ェ)
+	{ kana: "ニェ", romaji: "nye" },
+	{ kana: "ヒェ", romaji: "hye" },
+	{ kana: "ビェ", romaji: "bye" },
+	{ kana: "ピェ", romaji: "pye" },
+	{ kana: "ミェ", romaji: "mye" },
+	{ kana: "リェ", romaji: "rye" },
 
 	// ── Single-codepoint kana ──────────────────────────────────────────────────
 
