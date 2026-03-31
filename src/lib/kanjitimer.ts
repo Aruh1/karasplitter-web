@@ -406,6 +406,46 @@ export function acceptAllRemaining(
 // Kana/Romaji Auto-Match Helpers (Internal)
 // ============================================================================
 
+const PUNCTUATION_MAP: Record<string, string> = {
+	"“": '"',
+	"”": '"',
+	"「": '"',
+	"」": '"',
+	"『": '"',
+	"』": '"',
+	"＂": '"',
+	"‘": "'",
+	"’": "'",
+	"＇": "'",
+	"　": " ",
+	"、": ",",
+	"，": ",",
+	"。": ".",
+	"．": ".",
+	"！": "!",
+	"？": "?",
+	"（": "(",
+	"）": ")",
+	"：": ":",
+	"；": ";",
+	"〜": "~",
+	"～": "~",
+	ー: "-",
+	"—": "-",
+};
+
+function normalizeChar(c: string): string {
+	return PUNCTUATION_MAP[c] || c;
+}
+
+function normalizeString(s: string): string {
+	let res = "";
+	for (const char of s) {
+		res += normalizeChar(char);
+	}
+	return res.toLowerCase();
+}
+
 /**
  * Result of the auto-match algorithm for one step.
  * Mirrors Aegisub's `karaoke_match_result`.
@@ -460,6 +500,12 @@ function tryKanaMatch(
  * Used by the lookahead section of `autoMatchKaraoke`.
  */
 function getKanaRomajiReadings(kana: string): string[] {
+	if (kana.length === 2 && (kana[0] === "っ" || kana[0] === "ッ")) {
+		// Handle sokuon on the fly: duplicate the first consonant of the next kana
+		const baseReadings = getKanaRomajiReadings(kana[1]);
+		return baseReadings.map((r) => r[0] + r);
+	}
+
 	const results: string[] = [];
 	for (const pair of KANA_TABLE) {
 		if (pair.kana === kana) {
@@ -504,7 +550,10 @@ export function autoMatchKaraoke(
 	 */
 	const eatWhitespace = (): boolean => {
 		src = src.trimStart();
-		while (dstIdx < destChars.length && /^\s$/.test(destChars[dstIdx])) {
+		while (
+			dstIdx < destChars.length &&
+			/^\s$/.test(normalizeChar(destChars[dstIdx]))
+		) {
 			dstIdx++;
 			result.destinationLength++;
 		}
@@ -524,8 +573,11 @@ export function autoMatchKaraoke(
 		if (dstIdx >= destChars.length) break;
 		const dstChar = destChars[dstIdx];
 
-		// 1. Direct character match (case-insensitive; handles ASCII ↔ ASCII)
-		if (src.toLowerCase().startsWith(dstChar.toLowerCase())) {
+		// 1. Direct character match (case-insensitive; handles ASCII ↔ ASCII & smart-to-ascii mapped punctuation)
+		const normSrc = normalizeString(src);
+		const normDstChar = normalizeString(dstChar);
+
+		if (normSrc.startsWith(normDstChar)) {
 			src = src.slice(dstChar.length);
 			dstIdx++;
 			result.destinationLength++;

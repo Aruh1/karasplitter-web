@@ -122,11 +122,25 @@ export function k_array_syl(karaText: string): string[] {
 	const ln = karaText.length;
 	let l = 0;
 
+	// Helper to find the index of the next non-tag character
+	const getNextCharIdx = (startIdx: number): number => {
+		let idx = startIdx;
+		while (idx < ln) {
+			if (karaText[idx] === "{") {
+				const closeIdx = karaText.indexOf("}", idx);
+				if (closeIdx !== -1) {
+					idx = closeIdx + 1;
+					continue;
+				}
+			}
+			return idx;
+		}
+		return ln;
+	};
+
 	while (l < ln) {
 		const char = karaText[l];
-		const nextChar = karaText[l + 1] ?? "";
 		const lc = char.toLowerCase();
-		const lnc = nextChar.toLowerCase();
 
 		// Handle bracket content
 		if (char === "{") {
@@ -153,84 +167,104 @@ export function k_array_syl(karaText: string): string[] {
 			continue;
 		}
 
+		// Peek ahead for the next 1 or 2 actual characters (skipping tags)
+		const nextCharIdx1 = getNextCharIdx(l + 1);
+		const nextChar1 = nextCharIdx1 < ln ? karaText[nextCharIdx1] : "";
+		const lnc1 = nextChar1.toLowerCase();
+
+		const nextCharIdx2 = getNextCharIdx(nextCharIdx1 + 1);
+		const nextChar2 = nextCharIdx2 < ln ? karaText[nextCharIdx2] : "";
+		const lnc2 = nextChar2.toLowerCase();
+
+		// We extract the full slice (including tags) when we match a multi-char syllable
+		const pushSlice = (endIdxInclusive: number) => {
+			const slice = karaText.slice(l, endIdxInclusive + 1);
+			result.push(slice);
+			l = endIdxInclusive + 1;
+		};
+
 		// Syllable patterns
 		if (CONSONANTS_WITH_VOWEL.has(lc)) {
-			if (VOWELS_WITH_MACRON.has(lnc)) {
-				result.push(char + nextChar);
-				l += 2;
+			if (VOWELS_WITH_MACRON.has(lnc1)) {
+				pushSlice(nextCharIdx1);
 			} else if (
-				(lnc === "w" || lnc === "y") &&
-				l + 2 < ln &&
-				VOWELS_WITH_MACRON.has(karaText[l + 2]?.toLowerCase() ?? "")
+				(lnc1 === "w" || lnc1 === "y") &&
+				VOWELS_WITH_MACRON.has(lnc2)
 			) {
 				// kwa, gwa, bya, dyu, vya, etc.
-				result.push(char + nextChar + karaText[l + 2]);
-				l += 3;
+				pushSlice(nextCharIdx2);
 			} else {
-				result.push(char);
-				l++;
+				pushSlice(l);
 			}
 		} else if (lc === "w") {
-			if (W_VOWELS.has(lnc)) {
-				result.push(char + nextChar);
-				l += 2;
+			if (W_VOWELS.has(lnc1)) {
+				pushSlice(nextCharIdx1);
 			} else {
-				result.push(char);
-				l++;
+				pushSlice(l);
 			}
 		} else if (lc === "t") {
-			if (T_VOWELS.has(lnc)) {
-				result.push(char + nextChar);
-				l += 2;
-			} else if (lnc === "s" && l + 2 < ln) {
-				result.push(char + nextChar + karaText[l + 2]);
-				l += 3;
+			if (T_VOWELS.has(lnc1)) {
+				pushSlice(nextCharIdx1);
+			} else if (lnc1 === "s") {
+				// We don't peek 3 chars ahead strictly for 'tsa' check, but if we see 'ts' we assume it's one syllable chunk
+				// To be precise: ts + vowel. But even just 'ts' is grouped. Let's group 'ts' + next char if next is vowel.
+				if (VOWELS_WITH_MACRON.has(lnc2)) {
+					pushSlice(nextCharIdx2);
+				} else {
+					pushSlice(l);
+				}
 			} else {
-				result.push(char);
-				l++;
+				pushSlice(l);
 			}
 		} else if (lc === "c") {
-			if (lnc === "h" && l + 2 < ln) {
-				result.push(char + nextChar + karaText[l + 2]);
-				l += 3;
+			if (lnc1 === "h") {
+				if (VOWELS_WITH_MACRON.has(lnc2)) {
+					pushSlice(nextCharIdx2);
+				} else {
+					pushSlice(nextCharIdx1); // at least group 'ch'
+				}
 			} else {
-				result.push(char + nextChar);
-				l += 2;
+				// Just c + next handled via default or pushSlice(l)?
+				// Original logic grouped c + nextChar unconditionally if not 'h'. Let's group c + nextChar1
+				if (nextCharIdx1 < ln) {
+					pushSlice(nextCharIdx1);
+				} else {
+					pushSlice(l);
+				}
 			}
 		} else if (lc === "s") {
-			if (S_VOWELS.has(lnc)) {
-				result.push(char + nextChar);
-				l += 2;
-			} else if (lnc === "h" && l + 2 < ln) {
-				result.push(char + nextChar + karaText[l + 2]);
-				l += 3;
+			if (S_VOWELS.has(lnc1)) {
+				pushSlice(nextCharIdx1);
+			} else if (lnc1 === "h") {
+				if (VOWELS_WITH_MACRON.has(lnc2)) {
+					pushSlice(nextCharIdx2);
+				} else {
+					pushSlice(nextCharIdx1);
+				}
 			} else {
-				result.push(char);
-				l++;
+				pushSlice(l);
 			}
 		} else if (lc === "f") {
-			if (VOWELS_WITH_MACRON.has(lnc)) {
-				result.push(char + nextChar);
-				l += 2;
-			} else if (lnc === "y" && l + 2 < ln) {
+			if (VOWELS_WITH_MACRON.has(lnc1)) {
+				pushSlice(nextCharIdx1);
+			} else if (lnc1 === "y") {
 				// fyu (フュ)
-				result.push(char + nextChar + karaText[l + 2]);
-				l += 3;
+				if (VOWELS_WITH_MACRON.has(lnc2)) {
+					pushSlice(nextCharIdx2);
+				} else {
+					pushSlice(nextCharIdx1);
+				}
 			} else {
-				result.push(char);
-				l++;
+				pushSlice(l);
 			}
 		} else if (VOWELS.has(lc)) {
-			result.push(char);
-			l++;
+			pushSlice(l);
 		} else {
 			// Default: check if next is a vowel
-			if (VOWELS.has(lnc)) {
-				result.push(char + nextChar);
-				l += 2;
+			if (VOWELS.has(lnc1)) {
+				pushSlice(nextCharIdx1);
 			} else {
-				result.push(char);
-				l++;
+				pushSlice(l);
 			}
 		}
 	}
