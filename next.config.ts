@@ -29,7 +29,8 @@ const nextConfig: NextConfig = {
 						key: "Content-Security-Policy",
 						value: [
 							"default-src 'self'",
-							"script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+							// 'unsafe-eval' required for React development mode (safe in production as React won't use eval)
+							"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net",
 							"style-src 'self' 'unsafe-inline'",
 							"img-src 'self' data: https: blob:",
 							"font-src 'self' data:",
