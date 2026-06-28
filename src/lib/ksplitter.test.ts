@@ -236,7 +236,16 @@ describe("ksplitter", () => {
 				mode: "syl",
 				selector: "all",
 			});
-			expect(result.error).toContain("No valid");
+			expect(result.error).toContain("valid .ass file");
+			expect(result.content).toBe("");
+		});
+
+		it("should return error for empty input", () => {
+			const result = processAssFile("", {
+				mode: "syl",
+				selector: "all",
+			});
+			expect(result.error).toContain("empty");
 			expect(result.content).toBe("");
 		});
 

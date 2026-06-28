@@ -87,9 +87,9 @@ export function aegiTimeTOds(timestr: string): number {
 	const h = +timestr.slice(0, c1);
 	const m = +timestr.slice(c1 + 1, c2);
 	const s = +timestr.slice(c2 + 1, d);
-	const ms = +timestr.slice(d + 1);
+	const cs = +timestr.slice(d + 1); // Centiseconds (0-99 in ASS format)
 
-	return ms + (h * 3600 + m * 60 + s) * 100;
+	return cs + (h * 3600 + m * 60 + s) * 100;
 }
 
 export function str_TOkara_array(karaText: string, mode: SplitMode): string[] {
@@ -310,6 +310,30 @@ export function processAssFile(
 	content: string,
 	options: ProcessOptions,
 ): { content: string; error: string | null } {
+	// Input validation: check if content appears to be ASS format
+	const trimmedContent = content.trim();
+	if (!trimmedContent) {
+		return {
+			content: "",
+			error: "Input is empty. Please paste your .ass file content.",
+		};
+	}
+
+	// Check for common ASS indicators (not strict, just basic validation)
+	const hasAssIndicators =
+		trimmedContent.includes("Dialogue:") ||
+		trimmedContent.includes("Comment:") ||
+		trimmedContent.includes("[Script Info]") ||
+		trimmedContent.includes("[V4+ Styles]");
+
+	if (!hasAssIndicators) {
+		return {
+			content: "",
+			error:
+				"Input doesn't appear to be a valid .ass file. Expected Dialogue:, Comment:, or ASS section headers.",
+		};
+	}
+
 	const lines = content.split(/\r?\n/);
 	const outputLines: string[] = [];
 	let counter = 0;
