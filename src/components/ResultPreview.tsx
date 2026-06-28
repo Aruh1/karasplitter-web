@@ -27,7 +27,9 @@ export function ResultPreview({ processedContent, error }: ResultPreviewProps) {
 		if (error || !processedContent) return;
 
 		// Create blob and download
-		const blob = new Blob([processedContent], { type: "text/plain;charset=utf-8" });
+		const blob = new Blob([processedContent], {
+			type: "text/plain;charset=utf-8",
+		});
 		const url = URL.createObjectURL(blob);
 		const link = document.createElement("a");
 		link.href = url;
@@ -59,7 +61,11 @@ export function ResultPreview({ processedContent, error }: ResultPreviewProps) {
 						<span className="font-semibold">Processing Complete</span>
 					</div>
 					<div className="flex gap-2">
-						<Button onClick={handleCopy} variant="outline" className="active:scale-95 transform">
+						<Button
+							onClick={handleCopy}
+							variant="outline"
+							className="active:scale-95 transform"
+						>
 							{copied ? (
 								<Check className="w-4 h-4" />
 							) : (
@@ -67,7 +73,10 @@ export function ResultPreview({ processedContent, error }: ResultPreviewProps) {
 							)}
 							{copied ? "Copied!" : "Copy"}
 						</Button>
-						<Button onClick={handleDownload} className="active:scale-95 transform">
+						<Button
+							onClick={handleDownload}
+							className="active:scale-95 transform"
+						>
 							<Download className="w-4 h-4" />
 							Download .ass
 						</Button>

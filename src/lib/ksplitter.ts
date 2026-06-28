@@ -335,7 +335,11 @@ export function extractAssHeaders(content: string): string {
 
 	// If no [Events] section found, add it
 	if (!foundEvents && headerLines.length > 0) {
-		headerLines.push("", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text");
+		headerLines.push(
+			"",
+			"[Events]",
+			"Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+		);
 	}
 
 	return headerLines.join("\n");
