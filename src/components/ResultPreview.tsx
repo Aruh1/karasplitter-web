@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, FileCheck, AlertCircle } from "lucide-react";
+import { Check, Copy, FileCheck, AlertCircle, Download } from "lucide-react";
 import { useEffect } from "react";
 import { useClipboard } from "@/hooks/useClipboard";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,6 +23,21 @@ export function ResultPreview({ processedContent, error }: ResultPreviewProps) {
 		await copyToClipboard(processedContent);
 	};
 
+	const handleDownload = () => {
+		if (error || !processedContent) return;
+
+		// Create blob and download
+		const blob = new Blob([processedContent], { type: "text/plain;charset=utf-8" });
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement("a");
+		link.href = url;
+		link.download = `karasplitter_output_${Date.now()}.ass`;
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+		URL.revokeObjectURL(url);
+	};
+
 	if (error) {
 		return (
 			<div className="bg-[hsl(var(--destructive))]/10 p-6 rounded-lg shadow-sm border border-[hsl(var(--destructive))]/20 mt-6">
@@ -43,14 +58,20 @@ export function ResultPreview({ processedContent, error }: ResultPreviewProps) {
 						<FileCheck className="w-6 h-6" />
 						<span className="font-semibold">Processing Complete</span>
 					</div>
-					<Button onClick={handleCopy} className="active:scale-95 transform">
-						{copied ? (
-							<Check className="w-4 h-4" />
-						) : (
-							<Copy className="w-4 h-4" />
-						)}
-						{copied ? "Copied!" : "Copy to Clipboard"}
-					</Button>
+					<div className="flex gap-2">
+						<Button onClick={handleCopy} variant="outline" className="active:scale-95 transform">
+							{copied ? (
+								<Check className="w-4 h-4" />
+							) : (
+								<Copy className="w-4 h-4" />
+							)}
+							{copied ? "Copied!" : "Copy"}
+						</Button>
+						<Button onClick={handleDownload} className="active:scale-95 transform">
+							<Download className="w-4 h-4" />
+							Download .ass
+						</Button>
+					</div>
 				</div>
 
 				<div className="mt-4">
